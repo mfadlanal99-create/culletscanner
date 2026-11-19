@@ -1,0 +1,3169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cullet Size Identifier &amp; Area Analyzer</title>
+  <style>
+    :root {
+      --bg-app: #edf2f7;
+      --bg-panel: rgba(255, 255, 255, 0.68);
+      --bg-surface: rgba(255, 255, 255, 0.72);
+      --bg-input: rgba(255, 255, 255, 0.88);
+      --bg-hover: rgba(241, 245, 249, 0.95);
+      --border: rgba(15, 23, 42, 0.09);
+      --border-strong: rgba(15, 23, 42, 0.18);
+      --glass-highlight: rgba(255, 255, 255, 0.85);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent: #059669;
+      --accent-hover: #047857;
+      --accent-soft: rgba(16, 185, 129, 0.13);
+      --amber: #d97706;
+      --amber-soft: rgba(245, 158, 11, 0.14);
+      --indigo: #4f46e5;
+      --radius: 10px;
+      --radius-sm: 7px;
+      --shadow-glass: 0 4px 20px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background-color: var(--bg-app);
+      background-image:
+        radial-gradient(ellipse 75% 55% at 10% -5%, rgba(16, 185, 129, 0.14), transparent 55%),
+        radial-gradient(ellipse 65% 50% at 90% 5%, rgba(56, 189, 248, 0.16), transparent 55%),
+        radial-gradient(ellipse 60% 45% at 50% 105%, rgba(99, 102, 241, 0.10), transparent 55%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      line-height: 1.4;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.16); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.3); }
+
+    /* Frosted Glass Topbar (46px) */
+    .topbar {
+      height: 46px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.74);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 8px rgba(15, 23, 42, 0.04);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 30;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-primary);
+    }
+
+    .brand-divider {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      backdrop-filter: blur(8px);
+    }
+
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge-emerald {
+      background: rgba(16, 185, 129, 0.12);
+      color: #047857;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-amber {
+      background: rgba(245, 158, 11, 0.14);
+      color: #b45309;
+      border-color: rgba(245, 158, 11, 0.32);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.08s ease;
+      user-select: none;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: #ffffff;
+      border-color: var(--border-strong);
+    }
+    .btn:active:not(:disabled) { transform: translateY(0.5px); }
+    .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+
+    .btn-primary {
+      background: #0f172a;
+      border-color: #0f172a;
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #1e293b;
+      border-color: #1e293b;
+    }
+
+    .btn-indigo, .btn-amber {
+      background: rgba(255, 255, 255, 0.82);
+      border-color: var(--border);
+      color: var(--text-primary);
+    }
+    .btn-indigo:hover:not(:disabled), .btn-amber:hover:not(:disabled) {
+      background: #ffffff;
+      border-color: var(--border-strong);
+    }
+
+    .btn-active {
+      background: rgba(16, 185, 129, 0.14) !important;
+      border-color: var(--accent) !important;
+      color: #047857 !important;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18) !important;
+    }
+
+    .btn-sm { padding: 5px 9px; font-size: 11px; }
+    .btn-full { width: 100%; padding: 9px 12px; font-size: 12px; }
+
+    /* Edge-to-Edge Frosted Studio Layout */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 365px;
+      gap: 10px;
+      padding: 10px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    @media (max-width: 1180px) {
+      html, body { overflow: auto; height: auto; }
+      .workspace {
+        grid-template-columns: 280px minmax(0, 1fr);
+        overflow: visible;
+      }
+      .panel-right { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 820px) {
+      .workspace { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      backdrop-filter: blur(18px) saturate(170%);
+      -webkit-backdrop-filter: blur(18px) saturate(170%);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      outline: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-glass);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .panel-sidebar {
+      overflow-y: auto;
+    }
+
+    .panel-center {
+      background: rgba(255, 255, 255, 0.55);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel-right {
+      padding: 12px;
+      gap: 10px;
+      overflow-y: auto;
+    }
+
+    /* Flat Inspector Sections */
+    .step-section {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .step-section:last-child { border-bottom: none; }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .step-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+
+    .step-num { display: none; }
+
+    /* Dropzone */
+    .dropzone {
+      border: 1px dashed rgba(15, 23, 42, 0.22);
+      border-radius: var(--radius-sm);
+      padding: 14px 10px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.5);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .dropzone:hover, .dropzone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .dropzone p { font-size: 12px; color: var(--text-primary); font-weight: 500; margin-top: 4px; }
+    .dropzone small { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
+
+    .subcard {
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    label.field-label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    input[type="number"], select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+    }
+    input[type="number"]:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 99px;
+      background: rgba(15, 23, 42, 0.14);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #0f172a;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
+      cursor: pointer;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .check-row input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 30px;
+      height: 17px;
+      background: rgba(15, 23, 42, 0.16);
+      border-radius: 999px;
+      position: relative;
+      cursor: pointer;
+      outline: none;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .check-row input[type="checkbox"]::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+      transition: transform 0.15s;
+    }
+    .check-row input[type="checkbox"]:checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .check-row input[type="checkbox"]:checked::after {
+      transform: translateX(13px);
+    }
+
+    /* Center Viewport */
+    .viewport-toolbar {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tabs {
+      display: inline-flex;
+      background: rgba(15, 23, 42, 0.06);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .tab-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+    }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); }
+    .tab-btn.active {
+      background: #ffffff;
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+
+    .zoom-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .zoom-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      min-width: 40px;
+      text-align: center;
+    }
+
+    .overlay-bar {
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.48);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .overlay-checks {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .overlay-checks label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+    .overlay-checks label:hover { color: var(--text-primary); }
+    .overlay-checks input[type="checkbox"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .coords-readout {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .canvas-stage {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background-color: #e2e8f0;
+      background-image: radial-gradient(rgba(15, 23, 42, 0.12) 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+
+    #mainCanvas {
+      display: block;
+      cursor: crosshair;
+      box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(15, 23, 42, 0.08);
+      border-radius: 4px;
+      transform-origin: center center;
+    }
+
+    .empty-state {
+      text-align: center;
+      max-width: 340px;
+      color: var(--text-secondary);
+      padding: 28px 24px;
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      outline: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    }
+    .empty-state h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 10px 0 4px;
+    }
+
+    .mode-banner {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--accent);
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+      color: var(--text-primary);
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      z-index: 10;
+      pointer-events: none;
+      display: none;
+    }
+    .mode-banner.visible { display: block; }
+
+    /* Right Telemetry Panel */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .kpi-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    }
+
+    .kpi-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .kpi-val {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      margin-top: 2px;
+      letter-spacing: -0.02em;
+    }
+
+    .kpi-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-top: 2px;
+    }
+
+    .export-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .chart-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    }
+
+    .chart-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chart-canvas {
+      width: 100%;
+      height: 135px;
+      display: block;
+    }
+
+    .table-wrap {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      min-height: 180px;
+      flex: 1;
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    }
+
+    .table-header {
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .table-scroll {
+      overflow: auto;
+      flex: 1;
+      max-height: 250px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: rgba(248, 250, 252, 0.94);
+      backdrop-filter: blur(8px);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      z-index: 2;
+    }
+
+    td {
+      padding: 5px 8px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    tr:hover td { background: rgba(16, 185, 129, 0.06); }
+
+    .pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: var(--font-sans);
+      font-weight: 600;
+    }
+    .pill-Fine { background: rgba(2, 132, 199, 0.12); color: #0369a1; }
+    .pill-Small { background: rgba(5, 150, 105, 0.12); color: #047857; }
+    .pill-Medium { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+    .pill-Coarse { background: rgba(234, 88, 12, 0.14); color: #c2410c; }
+    .pill-Oversize { background: rgba(225, 29, 72, 0.14); color: #be123c; }
+
+    .status-msg {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+          <line x1="12" y1="22" x2="12" y2="15.5"></line>
+          <polyline points="22 8.5 12 15.5 2 8.5"></polyline>
+        </svg>
+      </div>
+      <div class="brand-title">
+        <span>Cullet Size Identifier</span>
+        <span class="brand-divider">/</span>
+        <span class="brand-sub">Area &amp; Sieve Analysis</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="btnLoadSample" class="btn btn-sm">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 3H6.8A2 2 0 0 1 5 17l4-9V3z"/></svg>
+        Load Sample
+      </button>
+      <div id="calibrationBadge" class="badge badge-amber">Ruler Uncalibrated</div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+
+    <!-- Left Controls Sidebar -->
+    <aside class="panel panel-sidebar">
+
+      <!-- Step 1: Upload Photo -->
+      <section class="step-section">
+        <div class="step-header">
+          <div class="step-title"><span class="step-num">1</span> Upload Photo</div>
+        </div>
+        <div id="dropZone" class="dropzone" tabindex="0" role="button" aria-label="Upload cullet photo">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p>Click or Drag &amp; Drop Photo</p>
+          <small>Flat cullet with a reference ruler</small>
+        </div>
+      </section>
+
+      <!-- Step 2: Ruler Calibration -->
+      <section class="step-section">
+        <div class="step-header">
+          <div class="step-title"><span class="step-num">2</span> Ruler Calibration</div>
+          <span id="calibScaleText" class="mono" style="font-size:11px; color:#34d399;">0.00 px/mm</span>
+        </div>
+        <div class="grid-2">
+          <button id="btnCalibMode" class="btn btn-indigo btn-sm">Click 2 Ruler Marks</button>
+          <button id="btnClearCalib" class="btn btn-sm">Reset Ruler</button>
+        </div>
+        <div class="subcard">
+          <div class="row-between" style="font-size:11px; color:var(--text-secondary);">
+            <span>P1: <strong id="pt1Display" class="mono" style="color:var(--text-primary);">-</strong></span>
+            <span>P2: <strong id="pt2Display" class="mono" style="color:var(--text-primary);">-</strong></span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <input type="number" id="knownDistInput" value="100" min="0.1" step="0.5" style="width:82px;" aria-label="Known ruler distance">
+            <select id="knownUnitSelect" style="flex:1;" aria-label="Distance unit">
+              <option value="mm">Millimeters (mm)</option>
+              <option value="cm">Centimeters (cm)</option>
+              <option value="inch">Inches (in)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3: Ruler Exclusion Box -->
+      <section class="step-section">
+        <div class="step-header">
+          <div class="step-title"><span class="step-num">3</span> Ruler Exclusion Box</div>
+          <span id="exclCountText" class="mono" style="font-size:11px; color:var(--text-secondary);">0 boxes</span>
+        </div>
+        <div class="grid-2">
+          <button id="btnExclMode" class="btn btn-amber btn-sm">Draw Exclusion Box</button>
+          <button id="btnClearExcl" class="btn btn-sm">Clear Boxes</button>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted);">
+          Drag over the ruler so ruler markings are excluded from cullet detection.
+        </div>
+      </section>
+
+      <!-- Step 4: Detection Settings -->
+      <section class="step-section">
+        <div class="step-header">
+          <div class="step-title"><span class="step-num">4</span> Detection Settings</div>
+        </div>
+        <div class="subcard">
+          <div>
+            <label class="field-label" for="methodSelect">Segmentation Method</label>
+            <select id="methodSelect" style="width:100%;">
+              <option value="bg_diff">Background Difference (bg_diff)</option>
+              <option value="threshold">Otsu Intensity (threshold)</option>
+              <option value="adaptive">Local Adaptive (adaptive)</option>
+            </select>
+          </div>
+          <div>
+            <div class="row-between" style="margin-bottom:3px;">
+              <label class="field-label" for="minAreaSlider" style="margin:0;">Min Particle Size</label>
+              <span id="minAreaVal" class="mono" style="font-size:11px; color:#34d399;">60 px</span>
+            </div>
+            <input type="range" id="minAreaSlider" min="10" max="1500" step="10" value="60">
+          </div>
+          <label class="check-row">
+            <span>Split Touching Pieces</span>
+            <input type="checkbox" id="watershedToggle" checked>
+          </label>
+          <label class="check-row">
+            <span>Invert Threshold (Light BG)</span>
+            <input type="checkbox" id="invertToggle">
+          </label>
+        </div>
+
+        <button id="btnAnalyze" class="btn btn-primary btn-full" disabled>
+          Calculate Cullet Area &amp; Size
+        </button>
+        <div id="statusMsg" class="status-msg">Load an image or sample to begin.</div>
+      </section>
+
+    </aside>
+
+    <!-- Center Interactive Canvas Viewport -->
+    <section class="panel panel-center">
+      <div class="viewport-toolbar">
+        <div class="tabs" role="tablist">
+          <button class="tab-btn active" data-view="annotated" role="tab">Annotated</button>
+          <button class="tab-btn" data-view="original" role="tab">Original</button>
+          <button class="tab-btn" data-view="mask" role="tab">Binary Mask</button>
+        </div>
+
+        <div class="zoom-controls">
+          <button id="btnZoomOut" class="btn btn-sm" title="Zoom Out">-</button>
+          <span id="zoomLabel" class="zoom-label">100%</span>
+          <button id="btnZoomIn" class="btn btn-sm" title="Zoom In">+</button>
+          <button id="btnZoomFit" class="btn btn-sm">Fit</button>
+          <button id="btnZoom100" class="btn btn-sm">1:1</button>
+        </div>
+      </div>
+
+      <div class="overlay-bar">
+        <div class="overlay-checks">
+          <label><input type="checkbox" id="chkFill" checked> Fill Overlay</label>
+          <label><input type="checkbox" id="chkIds" checked> Particle IDs</label>
+          <label><input type="checkbox" id="chkBoxes" checked> Bounding Box</label>
+          <label><input type="checkbox" id="chkScaleBar" checked> Scale Bar</label>
+        </div>
+        <div id="coordsReadout" class="coords-readout">X: -, Y: -</div>
+      </div>
+
+      <div id="canvasStage" class="canvas-stage">
+        <div id="modeBanner" class="mode-banner"></div>
+        <div id="emptyState" class="empty-state">
+          <div style="width:52px;height:52px;margin:0 auto;border-radius:14px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);display:flex;align-items:center;justify-content:center;color:#34d399;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+          <h3>No Cullet Image Loaded</h3>
+          <p style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Drop a top-down cullet photo on the left panel or click <strong style="color:#34d399;">Load Sample Cullet</strong> in the header to test immediately.</p>
+        </div>
+        <canvas id="mainCanvas" hidden></canvas>
+      </div>
+    </section>
+
+    <!-- Right KPI / Charts / Table Panel -->
+    <aside class="panel panel-right">
+
+      <!-- 4 KPI Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Count</div>
+          <div id="kpiCount" class="kpi-val">-</div>
+          <div id="kpiCountSub" class="kpi-sub">particles detected</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Area</div>
+          <div id="kpiArea" class="kpi-val">-</div>
+          <div id="kpiAreaSub" class="kpi-sub">cm² / mm²</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Mean Piece Area</div>
+          <div id="kpiMeanArea" class="kpi-val">-</div>
+          <div id="kpiMeanSub" class="kpi-sub">mean eq. diam: -</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Median Sieve D50</div>
+          <div id="kpiD50" class="kpi-val">-</div>
+          <div id="kpiD10D90" class="kpi-sub">D10: - | D90: -</div>
+        </div>
+      </div>
+
+      <!-- Export Buttons -->
+      <div class="export-row">
+        <button id="btnExportCsv" class="btn btn-sm" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          CSV
+        </button>
+        <button id="btnExportJson" class="btn btn-sm" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          JSON
+        </button>
+        <button id="btnExportPng" class="btn btn-sm" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          PNG
+        </button>
+      </div>
+
+      <!-- Size Distribution Histogram -->
+      <div class="chart-box">
+        <div class="chart-title">
+          <span>Size Distribution Histogram</span>
+          <span class="mono" style="font-size:10px; color:var(--text-muted);">Eq. Diameter (mm)</span>
+        </div>
+        <canvas id="histChart" class="chart-canvas"></canvas>
+      </div>
+
+      <!-- Cumulative Sieve Curve -->
+      <div class="chart-box">
+        <div class="chart-title">
+          <span>Cumulative Sieve Curve</span>
+          <span class="mono" style="font-size:10px; color:var(--text-muted);">% Passing</span>
+        </div>
+        <canvas id="sieveChart" class="chart-canvas"></canvas>
+      </div>
+
+      <!-- Particle Measurements Table -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <span>Particle Measurements</span>
+          <span id="tableCountBadge" class="mono" style="font-size:10px; color:var(--text-muted);">0 rows</span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Area (mm²)</th>
+                <th>Eq. Ø (mm)</th>
+                <th>Maj×Min (mm)</th>
+                <th>Circ.</th>
+                <th>Class</th>
+              </tr>
+            </thead>
+            <tbody id="particleTableBody">
+              <tr>
+                <td colspan="6" style="text-align:center; color:var(--text-muted); padding:18px; font-family:var(--font-sans);">
+                  Run analysis to view particle measurements.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- CV Engine Script (replaced with inline script during single-file build) -->
+  <script>
+/**
+ * CulletEngine — Pure client-side JavaScript Computer Vision Engine
+ * for glass cullet sizing, area calculation, and sieve analysis.
+ * Zero external dependencies. Exposed on window.CulletEngine.
+ */
+(function (global) {
+    'use strict';
+
+    var UNIT_TO_MM = {
+        mm: 1,
+        cm: 10,
+        inch: 25.4,
+        in: 25.4
+    };
+
+    var SIZE_CLASSES = [
+        { name: 'Fine', minMm: 0, maxMm: 5, color: [56, 189, 248] },      // sky
+        { name: 'Small', minMm: 5, maxMm: 10, color: [52, 211, 153] },   // emerald
+        { name: 'Medium', minMm: 10, maxMm: 20, color: [251, 191, 36] }, // amber
+        { name: 'Coarse', minMm: 20, maxMm: 40, color: [249, 115, 22] }, // orange
+        { name: 'Oversize', minMm: 40, maxMm: Infinity, color: [244, 63, 94] } // rose
+    ];
+
+    var PARTICLE_PALETTE = [
+        [56, 189, 248],
+        [52, 211, 153],
+        [251, 191, 36],
+        [249, 115, 22],
+        [167, 139, 250],
+        [244, 114, 182],
+        [45, 212, 191],
+        [163, 230, 53]
+    ];
+
+    function parsePoint(p) {
+        if (Array.isArray(p)) {
+            return { x: Number(p[0]), y: Number(p[1]) };
+        }
+        if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+            return { x: p.x, y: p.y };
+        }
+        throw new Error('Invalid point format; expected {x, y} or [x, y].');
+    }
+
+    function createImageDataSafe(data, width, height) {
+        if (typeof ImageData !== 'undefined') {
+            return new ImageData(data, width, height);
+        }
+        return { data: data, width: width, height: height };
+    }
+
+    /**
+     * 1. Calibrate pixel-to-millimeter scale from two points and a known distance.
+     */
+    function calibrateFromPoints(p1, p2, knownDist, unit) {
+        var pt1 = parsePoint(p1);
+        var pt2 = parsePoint(p2);
+        var dist = Number(knownDist);
+        var u = (unit || 'mm').toLowerCase();
+        var factor = UNIT_TO_MM[u];
+
+        if (!factor) {
+            throw new Error('Unsupported unit "' + unit + '". Use "mm", "cm", or "inch".');
+        }
+        if (!isFinite(dist) || dist <= 0) {
+            throw new Error('knownDist must be a positive number.');
+        }
+
+        var pixelDist = Math.hypot(pt2.x - pt1.x, pt2.y - pt1.y);
+        if (!isFinite(pixelDist) || pixelDist <= 0) {
+            throw new Error('Calibration points must not be identical.');
+        }
+
+        var realDistMm = dist * factor;
+        var pixelsPerMm = pixelDist / realDistMm;
+
+        return {
+            pixelsPerMm: pixelsPerMm,
+            pixelDist: pixelDist,
+            realDistMm: realDistMm
+        };
+    }
+
+    /**
+     * Build binary exclusion mask (1 = excluded, 0 = active).
+     */
+    function buildExclusionMask(width, height, exclusionBoxes) {
+        var excluded = new Uint8Array(width * height);
+        if (!exclusionBoxes || !exclusionBoxes.length) {
+            return excluded;
+        }
+        for (var b = 0; b < exclusionBoxes.length; b++) {
+            var box = exclusionBoxes[b];
+            if (!box) continue;
+            var x0 = box.x;
+            var y0 = box.y;
+            var w = box.width;
+            var h = box.height;
+            if (w < 0) { x0 += w; w = -w; }
+            if (h < 0) { y0 += h; h = -h; }
+            var xStart = Math.max(0, Math.floor(x0));
+            var yStart = Math.max(0, Math.floor(y0));
+            var xEnd = Math.min(width, Math.ceil(x0 + w));
+            var yEnd = Math.min(height, Math.ceil(y0 + h));
+            for (var y = yStart; y < yEnd; y++) {
+                var rowOff = y * width;
+                for (var x = xStart; x < xEnd; x++) {
+                    excluded[rowOff + x] = 1;
+                }
+            }
+        }
+        return excluded;
+    }
+
+    /**
+     * Compute Otsu threshold from an integer histogram array.
+     */
+    function computeOtsuFromHistogram(hist, totalCount) {
+        if (totalCount <= 0) return 0;
+        var bins = hist.length;
+        var sum = 0;
+        for (var i = 0; i < bins; i++) {
+            sum += i * hist[i];
+        }
+        var sumB = 0;
+        var wB = 0;
+        var maxVar = -1;
+        var bestThresh = 0;
+        for (var t = 0; t < bins; t++) {
+            wB += hist[t];
+            if (wB === 0) continue;
+            var wF = totalCount - wB;
+            if (wF === 0) break;
+            sumB += t * hist[t];
+            var mB = sumB / wB;
+            var mF = (sum - sumB) / wF;
+            var diff = mB - mF;
+            var betweenVar = wB * wF * diff * diff;
+            if (betweenVar > maxVar) {
+                maxVar = betweenVar;
+                bestThresh = t;
+            }
+        }
+        return bestThresh;
+    }
+
+    function medianFromHist256(hist, count) {
+        if (count <= 0) return 128;
+        var target = count >> 1;
+        var acc = 0;
+        for (var i = 0; i < 256; i++) {
+            acc += hist[i];
+            if (acc > target) return i;
+        }
+        return 128;
+    }
+
+    /**
+     * Estimate median background RGB from non-excluded border pixels.
+     */
+    function estimateBackgroundRGB(rgba, width, height, excluded) {
+        var histR = new Int32Array(256);
+        var histG = new Int32Array(256);
+        var histB = new Int32Array(256);
+        var borderMargin = Math.max(4, Math.min(16, Math.floor(Math.min(width, height) * 0.02)));
+        var count = 0;
+
+        for (var y = 0; y < height; y++) {
+            var isBorderY = y < borderMargin || y >= height - borderMargin;
+            var rowOff = y * width;
+            for (var x = 0; x < width; x++) {
+                if (!isBorderY && x >= borderMargin && x < width - borderMargin) {
+                    continue;
+                }
+                var idx = rowOff + x;
+                if (excluded[idx]) continue;
+                var p = idx << 2;
+                histR[rgba[p]]++;
+                histG[rgba[p + 1]]++;
+                histB[rgba[p + 2]]++;
+                count++;
+            }
+        }
+
+        // Fallback to sampling all non-excluded pixels if entire border was excluded
+        if (count === 0) {
+            var step = Math.max(1, Math.floor((width * height) / 10000));
+            for (var i = 0; i < width * height; i += step) {
+                if (excluded[i]) continue;
+                var p2 = i << 2;
+                histR[rgba[p2]]++;
+                histG[rgba[p2 + 1]]++;
+                histB[rgba[p2 + 2]]++;
+                count++;
+            }
+        }
+
+        return [
+            medianFromHist256(histR, count),
+            medianFromHist256(histG, count),
+            medianFromHist256(histB, count)
+        ];
+    }
+
+    /**
+     * Segment foreground using bg_diff, threshold, or adaptive method.
+     */
+    function segmentImage(rgba, width, height, excluded, method, invertThreshold) {
+        var n = width * height;
+        var mask = new Uint8Array(n);
+        var i, p;
+
+        if (method === 'bg_diff') {
+            var bg = estimateBackgroundRGB(rgba, width, height, excluded);
+            var bgR = bg[0], bgG = bg[1], bgB = bg[2];
+            var distQuant = new Uint16Array(n);
+            var hist = new Int32Array(443); // max Euclidean RGB distance is ~441.67
+            var activeCount = 0;
+
+            for (i = 0; i < n; i++) {
+                if (excluded[i]) continue;
+                p = i << 2;
+                var dr = rgba[p] - bgR;
+                var dg = rgba[p + 1] - bgG;
+                var db = rgba[p + 2] - bgB;
+                var d = Math.round(Math.sqrt(dr * dr + dg * dg + db * db));
+                if (d > 442) d = 442;
+                distQuant[i] = d;
+                hist[d]++;
+                activeCount++;
+            }
+
+            var thresh = Math.max(12, computeOtsuFromHistogram(hist, activeCount));
+            for (i = 0; i < n; i++) {
+                if (excluded[i]) continue;
+                // Background difference always detects pixels distinct from background
+                mask[i] = distQuant[i] > thresh ? 1 : 0;
+            }
+            return mask;
+        }
+
+        // Compute grayscale luminance for threshold or adaptive
+        var gray = new Uint8Array(n);
+        for (i = 0; i < n; i++) {
+            p = i << 2;
+            gray[i] = (77 * rgba[p] + 150 * rgba[p + 1] + 29 * rgba[p + 2]) >> 8;
+        }
+
+        if (method === 'threshold') {
+            var gHist = new Int32Array(256);
+            var gCount = 0;
+            for (i = 0; i < n; i++) {
+                if (excluded[i]) continue;
+                gHist[gray[i]]++;
+                gCount++;
+            }
+            var gThresh = computeOtsuFromHistogram(gHist, gCount);
+            for (i = 0; i < n; i++) {
+                if (excluded[i]) continue;
+                mask[i] = invertThreshold
+                    ? (gray[i] <= gThresh ? 1 : 0)
+                    : (gray[i] >= gThresh ? 1 : 0);
+            }
+            return mask;
+        }
+
+        // Adaptive local mean threshold via 2D integral image
+        var w1 = width + 1;
+        var integral = new Float64Array(w1 * (height + 1));
+        for (var y = 0; y < height; y++) {
+            var rowSum = 0;
+            var rowOff = y * width;
+            var intRow = (y + 1) * w1;
+            var prevIntRow = y * w1;
+            for (var x = 0; x < width; x++) {
+                rowSum += gray[rowOff + x];
+                integral[intRow + x + 1] = integral[prevIntRow + x + 1] + rowSum;
+            }
+        }
+
+        var radius = Math.max(12, Math.min(35, Math.round(Math.min(width, height) * 0.025)));
+        var offset = 8;
+        for (var ay = 0; ay < height; ay++) {
+            var y1 = Math.max(0, ay - radius);
+            var y2 = Math.min(height - 1, ay + radius);
+            var aRow = ay * width;
+            for (var ax = 0; ax < width; ax++) {
+                var idx = aRow + ax;
+                if (excluded[idx]) continue;
+                var x1 = Math.max(0, ax - radius);
+                var x2 = Math.min(width - 1, ax + radius);
+                var area = (x2 - x1 + 1) * (y2 - y1 + 1);
+                var sum = integral[(y2 + 1) * w1 + (x2 + 1)]
+                    - integral[y1 * w1 + (x2 + 1)]
+                    - integral[(y2 + 1) * w1 + x1]
+                    + integral[y1 * w1 + x1];
+                var mean = sum / area;
+                mask[idx] = invertThreshold
+                    ? (gray[idx] < mean - offset ? 1 : 0)
+                    : (gray[idx] > mean + offset ? 1 : 0);
+            }
+        }
+        return mask;
+    }
+
+    /**
+     * 3x3 morphological dilation or erosion (isDilate = true -> dilate, false -> erode).
+     */
+    function morph3x3(src, dst, width, height, isDilate) {
+        var target = isDilate ? 1 : 0;
+        var fallback = isDilate ? 0 : 1;
+        for (var y = 0; y < height; y++) {
+            var yStart = y > 0 ? y - 1 : 0;
+            var yEnd = y < height - 1 ? y + 1 : height - 1;
+            var rowOff = y * width;
+            for (var x = 0; x < width; x++) {
+                var xStart = x > 0 ? x - 1 : 0;
+                var xEnd = x < width - 1 ? x + 1 : width - 1;
+                var val = fallback;
+                outer: for (var ny = yStart; ny <= yEnd; ny++) {
+                    var nRow = ny * width;
+                    for (var nx = xStart; nx <= xEnd; nx++) {
+                        if (src[nRow + nx] === target) {
+                            val = target;
+                            break outer;
+                        }
+                    }
+                }
+                dst[rowOff + x] = val;
+            }
+        }
+    }
+
+    /**
+     * Morphological closing + opening, then flood-fill binary hole filling from borders.
+     */
+    function cleanMaskAndFillHoles(mask, width, height, excluded) {
+        var n = width * height;
+        var tmp = new Uint8Array(n);
+
+        // Closing (dilate -> erode) to bridge small internal gaps
+        morph3x3(mask, tmp, width, height, true);
+        morph3x3(tmp, mask, width, height, false);
+
+        // Opening (erode -> dilate) to remove 1px speckles
+        morph3x3(mask, tmp, width, height, false);
+        morph3x3(tmp, mask, width, height, true);
+
+        // Re-enforce exclusion boxes
+        for (var i = 0; i < n; i++) {
+            if (excluded[i]) mask[i] = 0;
+        }
+
+        // Binary hole filling: BFS from border on background pixels (mask === 0)
+        var visited = new Uint8Array(n);
+        var queue = new Int32Array(n);
+        var head = 0;
+        var tail = 0;
+
+        function tryEnqueue(idx) {
+            if (mask[idx] === 0 && !visited[idx]) {
+                visited[idx] = 1;
+                queue[tail++] = idx;
+            }
+        }
+
+        for (var x = 0; x < width; x++) {
+            tryEnqueue(x);
+            tryEnqueue((height - 1) * width + x);
+        }
+        for (var y = 1; y < height - 1; y++) {
+            tryEnqueue(y * width);
+            tryEnqueue(y * width + width - 1);
+        }
+
+        while (head < tail) {
+            var cur = queue[head++];
+            var cx = cur % width;
+            var cy = (cur - cx) / width;
+            if (cx > 0) tryEnqueue(cur - 1);
+            if (cx < width - 1) tryEnqueue(cur + 1);
+            if (cy > 0) tryEnqueue(cur - width);
+            if (cy < height - 1) tryEnqueue(cur + width);
+        }
+
+        // Any unvisited 0-pixel (not excluded) is an interior hole -> fill it
+        for (var k = 0; k < n; k++) {
+            if (mask[k] === 0 && !visited[k] && !excluded[k]) {
+                mask[k] = 1;
+            }
+        }
+    }
+
+    /**
+     * Exact O(N) 2D Euclidean Distance Transform (Felzenszwalb & Huttenlocher).
+     * Returns Float32Array of Euclidean distances from nearest 0-pixel.
+     */
+    function computeDistanceTransform(mask, width, height) {
+        var n = width * height;
+        var INF = 1e9;
+        var g = new Float32Array(n);
+        var maxDim = Math.max(width, height);
+        var f = new Float32Array(maxDim);
+        var d = new Float32Array(maxDim);
+        var v = new Int32Array(maxDim);
+        var z = new Float32Array(maxDim + 1);
+
+        function edt1d(len) {
+            var k = 0;
+            v[0] = 0;
+            z[0] = -INF;
+            z[1] = INF;
+            for (var q = 1; q < len; q++) {
+                var s;
+                while (true) {
+                    var r = v[k];
+                    s = ((f[q] + q * q) - (f[r] + r * r)) / (2 * q - 2 * r);
+                    if (s > z[k]) break;
+                    k--;
+                }
+                k++;
+                v[k] = q;
+                z[k] = s;
+                z[k + 1] = INF;
+            }
+            k = 0;
+            for (var q2 = 0; q2 < len; q2++) {
+                while (z[k + 1] < q2) k++;
+                var dx = q2 - v[k];
+                d[q2] = dx * dx + f[v[k]];
+            }
+        }
+
+        // Column pass
+        for (var x = 0; x < width; x++) {
+            for (var y = 0; y < height; y++) {
+                f[y] = mask[y * width + x] ? INF : 0;
+            }
+            edt1d(height);
+            for (var y2 = 0; y2 < height; y2++) {
+                g[y2 * width + x] = d[y2];
+            }
+        }
+
+        // Row pass
+        for (var ry = 0; ry < height; ry++) {
+            var rowOff = ry * width;
+            for (var rx = 0; rx < width; rx++) {
+                f[rx] = g[rowOff + rx];
+            }
+            edt1d(width);
+            for (var rx2 = 0; rx2 < width; rx2++) {
+                g[rowOff + rx2] = Math.sqrt(d[rx2]);
+            }
+        }
+
+        return g;
+    }
+
+    /**
+     * Connected components labeling (8-connected BFS).
+     */
+    function labelConnectedComponents(mask, width, height) {
+        var n = width * height;
+        var labels = new Int32Array(n);
+        var queue = new Int32Array(n);
+        var nextLabel = 1;
+        var dx = [-1, 0, 1, -1, 1, -1, 0, 1];
+        var dy = [-1, -1, -1, 0, 0, 1, 1, 1];
+
+        for (var i = 0; i < n; i++) {
+            if (mask[i] === 0 || labels[i] !== 0) continue;
+            var label = nextLabel++;
+            var head = 0;
+            var tail = 0;
+            labels[i] = label;
+            queue[tail++] = i;
+
+            while (head < tail) {
+                var cur = queue[head++];
+                var cx = cur % width;
+                var cy = (cur - cx) / width;
+                for (var dir = 0; dir < 8; dir++) {
+                    var nx = cx + dx[dir];
+                    var ny = cy + dy[dir];
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                    var nIdx = ny * width + nx;
+                    if (mask[nIdx] === 1 && labels[nIdx] === 0) {
+                        labels[nIdx] = label;
+                        queue[tail++] = nIdx;
+                    }
+                }
+            }
+        }
+
+        return { labels: labels, numLabels: nextLabel - 1 };
+    }
+
+    /**
+     * Optional distance-transform peak splitting (bucketed watershed) for touching shards.
+     */
+    function splitTouchingComponents(mask, ccLabels, numCC, width, height) {
+        var n = width * height;
+        var dist = computeDistanceTransform(mask, width, height);
+        var outLabels = new Int32Array(n);
+
+        // Find local distance maxima (radius 7, min distance >= 5 px)
+        var peakWin = 7;
+        var minPeakDist = 5.0;
+        var minPeakSepSq = 14 * 14;
+        var peaksByCC = new Array(numCC + 1);
+
+        for (var y = 0; y < height; y++) {
+            var rowOff = y * width;
+            for (var x = 0; x < width; x++) {
+                var idx = rowOff + x;
+                var cc = ccLabels[idx];
+                if (cc === 0) continue;
+                var d = dist[idx];
+                if (d < minPeakDist) continue;
+
+                var isMax = true;
+                var y0 = Math.max(0, y - peakWin);
+                var y1 = Math.min(height - 1, y + peakWin);
+                var x0 = Math.max(0, x - peakWin);
+                var x1 = Math.min(width - 1, x + peakWin);
+                for (var ny = y0; ny <= y1 && isMax; ny++) {
+                    var nRow = ny * width;
+                    for (var nx = x0; nx <= x1; nx++) {
+                        var nIdx = nRow + nx;
+                        if (nIdx !== idx && dist[nIdx] > d) {
+                            isMax = false;
+                            break;
+                        }
+                    }
+                }
+                if (isMax) {
+                    if (!peaksByCC[cc]) peaksByCC[cc] = [];
+                    peaksByCC[cc].push({ idx: idx, x: x, y: y, d: d });
+                }
+            }
+        }
+
+        // Assign watershed seed labels per CC (merging peaks too close together)
+        var nextLabel = 1;
+        var ccSingleLabel = new Int32Array(numCC + 1);
+        var seeds = [];
+
+        for (var c = 1; c <= numCC; c++) {
+            var cPeaks = peaksByCC[c];
+            if (!cPeaks || cPeaks.length <= 1) {
+                ccSingleLabel[c] = nextLabel++;
+                continue;
+            }
+            cPeaks.sort(function (a, b) { return b.d - a.d; });
+            var kept = [];
+            for (var p = 0; p < cPeaks.length; p++) {
+                var cand = cPeaks[p];
+                var mergeWithExisting = false;
+                for (var k = 0; k < kept.length; k++) {
+                    var ref = kept[k];
+                    var dx = cand.x - ref.x;
+                    var dy = cand.y - ref.y;
+                    if (dx * dx + dy * dy < minPeakSepSq) {
+                        mergeWithExisting = true;
+                        break;
+                    }
+                    // Check if there is a genuine neck/pinch between cand and ref;
+                    // if the ridge stays flat (e.g., elongated shard), do NOT split.
+                    var steps = Math.max(4, Math.ceil(Math.sqrt(dx * dx + dy * dy) / 2));
+                    var minAlong = Math.min(cand.d, ref.d);
+                    for (var st = 1; st < steps; st++) {
+                        var sx = Math.round(ref.x + (dx * st) / steps);
+                        var sy = Math.round(ref.y + (dy * st) / steps);
+                        var sd = dist[sy * width + sx];
+                        if (sd < minAlong) minAlong = sd;
+                    }
+                    if (minAlong >= 0.72 * Math.min(cand.d, ref.d)) {
+                        mergeWithExisting = true;
+                        break;
+                    }
+                }
+                if (!mergeWithExisting) kept.push(cand);
+            }
+            if (kept.length <= 1) {
+                ccSingleLabel[c] = nextLabel++;
+            } else {
+                for (var kp = 0; kp < kept.length; kp++) {
+                    var lbl = nextLabel++;
+                    outLabels[kept[kp].idx] = lbl;
+                    seeds.push(kept[kp].idx);
+                }
+            }
+        }
+
+        // Copy single-peak CCs directly
+        for (var i = 0; i < n; i++) {
+            var ccId = ccLabels[i];
+            if (ccId > 0 && ccSingleLabel[ccId] > 0) {
+                outLabels[i] = ccSingleLabel[ccId];
+            }
+        }
+
+        // Bucketed priority watershed (quantized distance 0..511)
+        if (seeds.length > 0) {
+            var NUM_BUCKETS = 512;
+            var buckets = new Array(NUM_BUCKETS);
+            for (var b = 0; b < NUM_BUCKETS; b++) buckets[b] = [];
+
+            var maxDist = 0;
+            for (var s = 0; s < seeds.length; s++) {
+                var sd = dist[seeds[s]];
+                if (sd > maxDist) maxDist = sd;
+            }
+            var scale = maxDist > 0 ? (NUM_BUCKETS - 1) / maxDist : 1;
+
+            for (var s2 = 0; s2 < seeds.length; s2++) {
+                var sIdx = seeds[s2];
+                var bIdx = Math.min(NUM_BUCKETS - 1, Math.max(0, Math.round(dist[sIdx] * scale)));
+                buckets[bIdx].push(sIdx);
+            }
+
+            var wdx = [-1, 1, 0, 0, -1, 1, -1, 1];
+            var wdy = [0, 0, -1, 1, -1, -1, 1, 1];
+
+            for (var lvl = NUM_BUCKETS - 1; lvl >= 0; lvl--) {
+                var q = buckets[lvl];
+                for (var qi = 0; qi < q.length; qi++) {
+                    var cur = q[qi];
+                    var curLabel = outLabels[cur];
+                    var cx = cur % width;
+                    var cy = (cur - cx) / width;
+                    for (var dir = 0; dir < 8; dir++) {
+                        var nx = cx + wdx[dir];
+                        var ny = cy + wdy[dir];
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                        var nIdx = ny * width + nx;
+                        if (mask[nIdx] === 1 && outLabels[nIdx] === 0 && ccLabels[nIdx] === ccLabels[cur]) {
+                            outLabels[nIdx] = curLabel;
+                            var nb = Math.min(lvl, Math.max(0, Math.round(dist[nIdx] * scale)));
+                            buckets[nb].push(nIdx);
+                        }
+                    }
+                }
+            }
+        }
+
+        return { labels: outLabels, numLabels: nextLabel - 1 };
+    }
+
+    function classifySizeMm(eqDiamMm) {
+        if (eqDiamMm === null || !isFinite(eqDiamMm)) return 'Uncalibrated';
+        for (var i = 0; i < SIZE_CLASSES.length; i++) {
+            var sc = SIZE_CLASSES[i];
+            if (eqDiamMm >= sc.minMm && eqDiamMm < sc.maxMm) {
+                return sc.name;
+            }
+        }
+        return 'Oversize';
+    }
+
+    function percentileSorted(sortedArr, p) {
+        var len = sortedArr.length;
+        if (len === 0) return null;
+        if (len === 1) return sortedArr[0];
+        var idx = p * (len - 1);
+        var lo = Math.floor(idx);
+        var hi = Math.ceil(idx);
+        var frac = idx - lo;
+        return sortedArr[lo] * (1 - frac) + sortedArr[hi] * frac;
+    }
+
+    /**
+     * Build particle objects with PCA oriented bounding boxes, perimeters, and KPIs.
+     */
+    function extractParticlesAndReport(labels, numLabels, width, height, minAreaPx, pixelsPerMm) {
+        var n = width * height;
+        var counts = new Int32Array(numLabels + 1);
+        var i;
+        for (i = 0; i < n; i++) {
+            var l = labels[i];
+            if (l > 0) counts[l]++;
+        }
+
+        // Map surviving raw labels -> compact 1..K IDs
+        var remap = new Int32Array(numLabels + 1);
+        var kCount = 0;
+        for (var lIdx = 1; lIdx <= numLabels; lIdx++) {
+            if (counts[lIdx] >= minAreaPx) {
+                remap[lIdx] = ++kCount;
+            }
+        }
+
+        // Accumulate pixel coordinates and boundary pixels
+        var sumX = new Float64Array(kCount + 1);
+        var sumY = new Float64Array(kCount + 1);
+        var minX = new Int32Array(kCount + 1);
+        var minY = new Int32Array(kCount + 1);
+        var maxX = new Int32Array(kCount + 1);
+        var maxY = new Int32Array(kCount + 1);
+        var areas = new Int32Array(kCount + 1);
+        var perimEdges = new Int32Array(kCount + 1);
+        var boundaryLists = new Array(kCount + 1);
+
+        for (var k = 1; k <= kCount; k++) {
+            minX[k] = width;
+            minY[k] = height;
+            maxX[k] = -1;
+            maxY[k] = -1;
+            boundaryLists[k] = [];
+        }
+
+        for (var y = 0; y < height; y++) {
+            var rowOff = y * width;
+            for (var x = 0; x < width; x++) {
+                var idx = rowOff + x;
+                var raw = labels[idx];
+                if (raw === 0) continue;
+                var id = remap[raw];
+                labels[idx] = id;
+                if (id === 0) continue;
+
+                areas[id]++;
+                sumX[id] += x;
+                sumY[id] += y;
+                if (x < minX[id]) minX[id] = x;
+                if (x > maxX[id]) maxX[id] = x;
+                if (y < minY[id]) minY[id] = y;
+                if (y > maxY[id]) maxY[id] = y;
+
+                // 4-neighbor boundary check for perimeter & fast overlay rendering
+                var exposedEdges = 0;
+                if (x === 0 || labels[idx - 1] !== id) exposedEdges++;
+                if (x === width - 1 || labels[idx + 1] !== raw) exposedEdges++;
+                if (y === 0 || labels[idx - width] !== id) exposedEdges++;
+                if (y === height - 1 || labels[idx + width] !== raw) exposedEdges++;
+
+                if (exposedEdges > 0) {
+                    perimEdges[id] += exposedEdges;
+                    boundaryLists[id].push(idx);
+                }
+            }
+        }
+
+        // Second pass for exact PCA covariance on boundary pixels (fast & accurate)
+        var cxx = new Float64Array(kCount + 1);
+        var cyy = new Float64Array(kCount + 1);
+        var cxy = new Float64Array(kCount + 1);
+
+        for (var k2 = 1; k2 <= kCount; k2++) {
+            var cx = sumX[k2] / areas[k2];
+            var cy = sumY[k2] / areas[k2];
+            var bList = boundaryLists[k2];
+            for (var bi = 0; bi < bList.length; bi++) {
+                var bIdx = bList[bi];
+                var bx = bIdx % width;
+                var by = (bIdx - bx) / width;
+                var dx = bx - cx;
+                var dy = by - cy;
+                cxx[k2] += dx * dx;
+                cyy[k2] += dy * dy;
+                cxy[k2] += dx * dy;
+            }
+        }
+
+        var calibrated = Boolean(pixelsPerMm && isFinite(pixelsPerMm) && pixelsPerMm > 0);
+        var mmPerPx = calibrated ? 1 / pixelsPerMm : null;
+        var particles = [];
+
+        for (var id2 = 1; id2 <= kCount; id2++) {
+            var areaPx = areas[id2];
+            var cx2 = sumX[id2] / areaPx;
+            var cy2 = sumY[id2] / areaPx;
+            // Crofton-style perimeter correction (pi/4 * 4-connected boundary edge count)
+            var perimPx = Math.max(1, perimEdges[id2] * (Math.PI / 4));
+            var eqDiamPx = 2 * Math.sqrt(areaPx / Math.PI);
+            var circularity = Math.min(1, (4 * Math.PI * areaPx) / (perimPx * perimPx));
+
+            // PCA orientation
+            var angleRad = 0.5 * Math.atan2(2 * cxy[id2], cxx[id2] - cyy[id2]);
+            var ux = Math.cos(angleRad);
+            var uy = Math.sin(angleRad);
+            var vx = -uy;
+            var vy = ux;
+
+            var minU = Infinity, maxU = -Infinity;
+            var minV = Infinity, maxV = -Infinity;
+            var bList2 = boundaryLists[id2];
+            for (var j = 0; j < bList2.length; j++) {
+                var pIdx = bList2[j];
+                var px = pIdx % width;
+                var py = (pIdx - px) / width;
+                var rx = px - cx2;
+                var ry = py - cy2;
+                var pu = rx * ux + ry * uy;
+                var pv = rx * vx + ry * vy;
+                if (pu < minU) minU = pu;
+                if (pu > maxU) maxU = pu;
+                if (pv < minV) minV = pv;
+                if (pv > maxV) maxV = pv;
+            }
+
+            var spanU = maxU - minU + 1;
+            var spanV = maxV - minV + 1;
+            var majorPx = Math.max(spanU, spanV);
+            var minorPx = Math.min(spanU, spanV);
+            var midU = (minU + maxU) * 0.5;
+            var midV = (minV + maxV) * 0.5;
+            var obbCx = cx2 + midU * ux + midV * vx;
+            var obbCy = cy2 + midU * uy + midV * vy;
+
+            var corners = [
+                { x: cx2 + minU * ux + minV * vx, y: cy2 + minU * uy + minV * vy },
+                { x: cx2 + maxU * ux + minV * vx, y: cy2 + maxU * uy + minV * vy },
+                { x: cx2 + maxU * ux + maxV * vx, y: cy2 + maxU * uy + maxV * vy },
+                { x: cx2 + minU * ux + maxV * vx, y: cy2 + minU * uy + maxV * vy }
+            ];
+
+            var areaMm2 = calibrated ? areaPx * mmPerPx * mmPerPx : null;
+            var areaCm2 = calibrated ? areaMm2 / 100 : null;
+            var eqDiamMm = calibrated ? eqDiamPx * mmPerPx : null;
+            var perimMm = calibrated ? perimPx * mmPerPx : null;
+            var majorMm = calibrated ? majorPx * mmPerPx : null;
+            var minorMm = calibrated ? minorPx * mmPerPx : null;
+            var sizeClass = classifySizeMm(eqDiamMm);
+
+            particles.push({
+                id: id2,
+                area_px: areaPx,
+                perimeter_px: perimPx,
+                centroid: { x: cx2, y: cy2 },
+                bbox: {
+                    x: minX[id2],
+                    y: minY[id2],
+                    width: maxX[id2] - minX[id2] + 1,
+                    height: maxY[id2] - minY[id2] + 1
+                },
+                obb: {
+                    cx: obbCx,
+                    cy: obbCy,
+                    width: spanU,
+                    height: spanV,
+                    majorAxisPx: majorPx,
+                    minorAxisPx: minorPx,
+                    angleRad: angleRad,
+                    corners: corners
+                },
+                major_axis_px: majorPx,
+                minor_axis_px: minorPx,
+                equivalent_diameter_px: eqDiamPx,
+                circularity: circularity,
+                area_mm2: areaMm2,
+                area_cm2: areaCm2,
+                perimeter_mm: perimMm,
+                equivalent_diameter_mm: eqDiamMm,
+                major_axis_mm: majorMm,
+                minor_axis_mm: minorMm,
+                sizeClass: sizeClass,
+                boundaryPixels: new Int32Array(bList2)
+            });
+        }
+
+        // Compute summary KPIs
+        var totalParticles = particles.length;
+        var totalAreaPx = 0;
+        for (var pi = 0; pi < totalParticles; pi++) {
+            totalAreaPx += particles[pi].area_px;
+        }
+
+        var sizeClassCounts = { Fine: 0, Small: 0, Medium: 0, Coarse: 0, Oversize: 0 };
+        var histogramBins = ['0-5', '5-10', '10-15', '15-20', '20-25', '25-30', '30-40', '40+'];
+        var histogramCounts = [0, 0, 0, 0, 0, 0, 0, 0];
+        var sieveCurve = [];
+
+        var totalAreaMm2 = null;
+        var totalAreaCm2 = null;
+        var meanAreaMm2 = null;
+        var medianAreaMm2 = null;
+        var meanEqDiamMm = null;
+        var d10Mm = null;
+        var d50Mm = null;
+        var d90Mm = null;
+
+        if (calibrated && totalParticles > 0) {
+            totalAreaMm2 = totalAreaPx * mmPerPx * mmPerPx;
+            totalAreaCm2 = totalAreaMm2 / 100;
+            meanAreaMm2 = totalAreaMm2 / totalParticles;
+
+            var areasSorted = [];
+            var diamsSorted = [];
+            var diamSum = 0;
+
+            for (var pIdx2 = 0; pIdx2 < totalParticles; pIdx2++) {
+                var pt = particles[pIdx2];
+                areasSorted.push(pt.area_mm2);
+                diamsSorted.push(pt.equivalent_diameter_mm);
+                diamSum += pt.equivalent_diameter_mm;
+                if (sizeClassCounts.hasOwnProperty(pt.sizeClass)) {
+                    sizeClassCounts[pt.sizeClass]++;
+                }
+                var dMm = pt.equivalent_diameter_mm;
+                if (dMm < 5) histogramCounts[0]++;
+                else if (dMm < 10) histogramCounts[1]++;
+                else if (dMm < 15) histogramCounts[2]++;
+                else if (dMm < 20) histogramCounts[3]++;
+                else if (dMm < 25) histogramCounts[4]++;
+                else if (dMm < 30) histogramCounts[5]++;
+                else if (dMm < 40) histogramCounts[6]++;
+                else histogramCounts[7]++;
+            }
+
+            areasSorted.sort(function (a, b) { return a - b; });
+            diamsSorted.sort(function (a, b) { return a - b; });
+
+            medianAreaMm2 = percentileSorted(areasSorted, 0.5);
+            meanEqDiamMm = diamSum / totalParticles;
+            d10Mm = percentileSorted(diamsSorted, 0.1);
+            d50Mm = percentileSorted(diamsSorted, 0.5);
+            d90Mm = percentileSorted(diamsSorted, 0.9);
+
+            var sieveSizes = [2, 5, 10, 15, 20, 25, 30, 40, 50];
+            for (var si = 0; si < sieveSizes.length; si++) {
+                var sz = sieveSizes[si];
+                var passCount = 0;
+                var passArea = 0;
+                for (var pj = 0; pj < totalParticles; pj++) {
+                    if (particles[pj].equivalent_diameter_mm <= sz) {
+                        passCount++;
+                        passArea += particles[pj].area_mm2;
+                    }
+                }
+                sieveCurve.push({
+                    sizeMm: sz,
+                    passingPct: (passCount / totalParticles) * 100,
+                    cumulativeAreaPct: (passArea / totalAreaMm2) * 100
+                });
+            }
+        }
+
+        var report = {
+            calibrated: calibrated,
+            pixelsPerMm: calibrated ? pixelsPerMm : null,
+            totalParticles: totalParticles,
+            totalAreaPx: totalAreaPx,
+            totalAreaMm2: totalAreaMm2,
+            totalAreaCm2: totalAreaCm2,
+            meanAreaMm2: meanAreaMm2,
+            medianAreaMm2: medianAreaMm2,
+            meanEqDiamMm: meanEqDiamMm,
+            d10Mm: d10Mm,
+            d50Mm: d50Mm,
+            d90Mm: d90Mm,
+            sizeClassCounts: sizeClassCounts,
+            histogramBins: histogramBins,
+            histogramCounts: histogramCounts,
+            sieveCurve: sieveCurve
+        };
+
+        return { particles: particles, report: report };
+    }
+
+    /**
+     * 2. Analyze ImageData and return { report, maskImageData, particles }.
+     */
+    function analyzeImageData(imageData, options) {
+        if (!imageData || !imageData.data || !imageData.width || !imageData.height) {
+            throw new Error('Invalid ImageData provided to analyzeImageData.');
+        }
+
+        var opts = options || {};
+        var width = imageData.width;
+        var height = imageData.height;
+        var rgba = imageData.data;
+        var pixelsPerMm = typeof opts.pixelsPerMm === 'number' ? opts.pixelsPerMm : null;
+        var exclusionBoxes = opts.exclusionBoxes || [];
+        var method = opts.method || 'bg_diff';
+        var invertThreshold = Boolean(opts.invertThreshold);
+        var minAreaPx = typeof opts.minAreaPx === 'number' ? Math.max(1, opts.minAreaPx) : 50;
+        var enableWatershed = Boolean(opts.enableWatershed);
+
+        var excluded = buildExclusionMask(width, height, exclusionBoxes);
+        var mask = segmentImage(rgba, width, height, excluded, method, invertThreshold);
+        cleanMaskAndFillHoles(mask, width, height, excluded);
+
+        var cc = labelConnectedComponents(mask, width, height);
+        var finalLabels = cc;
+        if (enableWatershed && cc.numLabels > 0) {
+            finalLabels = splitTouchingComponents(mask, cc.labels, cc.numLabels, width, height);
+        }
+
+        var extracted = extractParticlesAndReport(
+            finalLabels.labels,
+            finalLabels.numLabels,
+            width,
+            height,
+            minAreaPx,
+            pixelsPerMm
+        );
+
+        // Build binary mask ImageData from surviving particles
+        var n = width * height;
+        var maskRgba = new Uint8ClampedArray(n * 4);
+        var labels = finalLabels.labels;
+        for (var i = 0; i < n; i++) {
+            var p = i << 2;
+            var val = labels[i] > 0 ? 255 : 0;
+            maskRgba[p] = val;
+            maskRgba[p + 1] = val;
+            maskRgba[p + 2] = val;
+            maskRgba[p + 3] = 255;
+        }
+
+        return {
+            report: extracted.report,
+            maskImageData: createImageDataSafe(maskRgba, width, height),
+            particles: extracted.particles,
+            width: width,
+            height: height,
+            _labels: labels
+        };
+    }
+
+    function getParticleColor(particle) {
+        if (particle.sizeClass && particle.sizeClass !== 'Uncalibrated') {
+            for (var i = 0; i < SIZE_CLASSES.length; i++) {
+                if (SIZE_CLASSES[i].name === particle.sizeClass) {
+                    return SIZE_CLASSES[i].color;
+                }
+            }
+        }
+        return PARTICLE_PALETTE[(particle.id - 1) % PARTICLE_PALETTE.length];
+    }
+
+    /**
+     * 3. Render annotated overlay onto target canvas.
+     */
+    function renderAnnotatedCanvas(canvas, sourceImgOrCanvas, analysisResult, renderOpts) {
+        if (!canvas || !sourceImgOrCanvas) return;
+        var opts = renderOpts || {};
+        var showFill = opts.showFill !== false;
+        var showIds = opts.showIds !== false;
+        var showBoxes = Boolean(opts.showBoxes);
+        var showScaleBar = opts.showScaleBar !== false;
+
+        var srcW = sourceImgOrCanvas.naturalWidth || sourceImgOrCanvas.width;
+        var srcH = sourceImgOrCanvas.naturalHeight || sourceImgOrCanvas.height;
+        if (canvas.width !== srcW) canvas.width = srcW;
+        if (canvas.height !== srcH) canvas.height = srcH;
+
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, srcW, srcH);
+        ctx.drawImage(sourceImgOrCanvas, 0, 0, srcW, srcH);
+
+        // Draw particle fill & boundaries
+        if (analysisResult && analysisResult.particles && analysisResult.particles.length > 0) {
+            var particles = analysisResult.particles;
+            var labels = analysisResult._labels;
+
+            if (showFill && labels && labels.length === srcW * srcH) {
+                var colorTable = new Array(particles.length + 1);
+                for (var pi = 0; pi < particles.length; pi++) {
+                    colorTable[particles[pi].id] = getParticleColor(particles[pi]);
+                }
+
+                var overlayCanvas = document.createElement('canvas');
+                overlayCanvas.width = srcW;
+                overlayCanvas.height = srcH;
+                var oCtx = overlayCanvas.getContext('2d');
+                var oImg = oCtx.createImageData(srcW, srcH);
+                var oData = oImg.data;
+
+                for (var i = 0; i < labels.length; i++) {
+                    var lbl = labels[i];
+                    if (lbl === 0) continue;
+                    var col = colorTable[lbl];
+                    if (!col) continue;
+                    var p = i << 2;
+                    oData[p] = col[0];
+                    oData[p + 1] = col[1];
+                    oData[p + 2] = col[2];
+                    oData[p + 3] = 85;
+                }
+
+                // Crisp solid boundary pixels
+                for (var pi2 = 0; pi2 < particles.length; pi2++) {
+                    var pt = particles[pi2];
+                    var bCol = colorTable[pt.id];
+                    var bPx = pt.boundaryPixels;
+                    for (var bi = 0; bi < bPx.length; bi++) {
+                        var bp = bPx[bi] << 2;
+                        oData[bp] = bCol[0];
+                        oData[bp + 1] = bCol[1];
+                        oData[bp + 2] = bCol[2];
+                        oData[bp + 3] = 240;
+                    }
+                }
+
+                oCtx.putImageData(oImg, 0, 0);
+                ctx.drawImage(overlayCanvas, 0, 0);
+            }
+
+            // Oriented bounding boxes
+            if (showBoxes) {
+                ctx.save();
+                ctx.lineWidth = 1.75;
+                ctx.strokeStyle = '#38bdf8';
+                ctx.setLineDash([5, 3]);
+                for (var bi2 = 0; bi2 < particles.length; bi2++) {
+                    var corners = particles[bi2].obb.corners;
+                    ctx.beginPath();
+                    ctx.moveTo(corners[0].x, corners[0].y);
+                    ctx.lineTo(corners[1].x, corners[1].y);
+                    ctx.lineTo(corners[2].x, corners[2].y);
+                    ctx.lineTo(corners[3].x, corners[3].y);
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            // Particle IDs
+            if (showIds) {
+                ctx.save();
+                ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                for (var ii = 0; ii < particles.length; ii++) {
+                    var part = particles[ii];
+                    var labelTxt = '#' + part.id;
+                    var tw = ctx.measureText(labelTxt).width + 8;
+                    var tx = part.centroid.x;
+                    var ty = part.centroid.y;
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+                    ctx.fillRect(tx - tw / 2, ty - 9, tw, 18);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillText(labelTxt, tx, ty + 0.5);
+                }
+                ctx.restore();
+            }
+        }
+
+        // Exclusion boxes
+        var exBoxes = opts.exclusionBoxes;
+        if (exBoxes && exBoxes.length) {
+            ctx.save();
+            for (var ei = 0; ei < exBoxes.length; ei++) {
+                var box = exBoxes[ei];
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.14)';
+                ctx.fillRect(box.x, box.y, box.width, box.height);
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                ctx.strokeRect(box.x, box.y, box.width, box.height);
+                ctx.setLineDash([]);
+                ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+                ctx.fillStyle = '#ef4444';
+                var lx = box.width < 0 ? box.x + box.width : box.x;
+                var ly = box.height < 0 ? box.y + box.height : box.y;
+                ctx.fillText('EXCLUDED', lx + 6, Math.max(14, ly + 14));
+            }
+            ctx.restore();
+        }
+
+        // Calibration points & line
+        var calibPts = opts.calibPoints;
+        if (calibPts && calibPts.length > 0) {
+            ctx.save();
+            var ptA = parsePoint(calibPts[0]);
+            if (calibPts.length >= 2) {
+                var ptB = parsePoint(calibPts[1]);
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(ptA.x, ptA.y);
+                ctx.lineTo(ptB.x, ptB.y);
+                ctx.stroke();
+            }
+            for (var ci = 0; ci < Math.min(2, calibPts.length); ci++) {
+                var cp = parsePoint(calibPts[ci]);
+                ctx.fillStyle = '#22d3ee';
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(cp.x, cp.y, 5.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Metric scale bar
+        var ppm = analysisResult && analysisResult.report && analysisResult.report.pixelsPerMm;
+        if (showScaleBar && ppm && ppm > 0) {
+            var candidatesMm = [5, 10, 20, 50, 100, 200, 500];
+            var chosenMm = 20;
+            for (var si = 0; si < candidatesMm.length; si++) {
+                var pxLen = candidatesMm[si] * ppm;
+                if (pxLen >= 80 && pxLen <= 220) {
+                    chosenMm = candidatesMm[si];
+                    break;
+                }
+                if (pxLen < 80) chosenMm = candidatesMm[si];
+            }
+            var barPx = chosenMm * ppm;
+            var label = chosenMm >= 100 ? (chosenMm / 10) + ' cm' : chosenMm + ' mm';
+            var padX = 24;
+            var padY = srcH - 26;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+            ctx.fillRect(padX - 10, padY - 26, barPx + 20, 38);
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(padX, padY - 6);
+            ctx.lineTo(padX, padY);
+            ctx.lineTo(padX + barPx, padY);
+            ctx.lineTo(padX + barPx, padY - 6);
+            ctx.stroke();
+            ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, padX + barPx / 2, padY - 10);
+            ctx.restore();
+        }
+    }
+
+    /**
+     * 4. Generate a 1200x800 synthetic glass cullet inspection image with 15cm metric ruler.
+     */
+    function generateSampleImage() {
+        var width = 1200;
+        var height = 800;
+        var canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        var ctx = canvas.getContext('2d');
+
+        // Clean industrial light-gray inspection mat background
+        ctx.fillStyle = '#e2e5ea';
+        ctx.fillRect(0, 0, width, height);
+
+        // Subtle inspection grid lines
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+        ctx.lineWidth = 1;
+        for (var gx = 0; gx < width; gx += 60) {
+            ctx.beginPath();
+            ctx.moveTo(gx, 0);
+            ctx.lineTo(gx, height);
+            ctx.stroke();
+        }
+        for (var gy = 0; gy < height; gy += 60) {
+            ctx.beginPath();
+            ctx.moveTo(0, gy);
+            ctx.lineTo(width, gy);
+            ctx.stroke();
+        }
+
+        // Draw 15 cm metric ruler at top (6 px/mm -> 0cm at x=120, 10cm at x=720, 15cm at x=1020)
+        var rulerX = 100;
+        var rulerY = 30;
+        var rulerW = 950;
+        var rulerH = 85;
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.18)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(rulerX, rulerY, rulerW, rulerH);
+        ctx.restore();
+
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(rulerX, rulerY, rulerW, rulerH);
+
+        // Ruler ticks (1 mm = 6 px)
+        var zeroX = 120;
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#0f172a';
+        ctx.font = 'bold 13px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+
+        for (var mm = 0; mm <= 150; mm++) {
+            var tx = zeroX + mm * 6;
+            var tickH = 10;
+            ctx.lineWidth = 1;
+            if (mm % 10 === 0) {
+                tickH = 26;
+                ctx.lineWidth = 2;
+                ctx.fillText(String(mm / 10), tx, rulerY + 46);
+            } else if (mm % 5 === 0) {
+                tickH = 18;
+                ctx.lineWidth = 1.4;
+            }
+            ctx.beginPath();
+            ctx.moveTo(tx, rulerY);
+            ctx.lineTo(tx, rulerY + tickH);
+            ctx.stroke();
+        }
+        ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#334155';
+        ctx.fillText('METRIC SCALE (cm) — 150 mm', rulerX + 18, rulerY + 72);
+
+        // Deterministic PRNG for realistic shards
+        var seed = 4219;
+        function rand() {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            return seed / 4294967296;
+        }
+
+        // 16 glass shards: amber, green, and clear (dark-edged refractive glass)
+        var shardSpecs = [
+            { cx: 195, cy: 230, r: 52, type: 'amber' },
+            { cx: 360, cy: 245, r: 68, type: 'green' },
+            { cx: 540, cy: 220, r: 44, type: 'clear' },
+            { cx: 710, cy: 240, r: 85, type: 'amber' },
+            { cx: 920, cy: 225, r: 58, type: 'green' },
+            { cx: 1070, cy: 255, r: 38, type: 'clear' },
+
+            { cx: 165, cy: 430, r: 76, type: 'green' },
+            { cx: 350, cy: 445, r: 48, type: 'clear' },
+            { cx: 520, cy: 425, r: 92, type: 'amber' },
+            { cx: 730, cy: 455, r: 62, type: 'clear' },
+            { cx: 910, cy: 430, r: 72, type: 'amber' },
+            { cx: 1065, cy: 450, r: 42, type: 'green' },
+
+            { cx: 215, cy: 645, r: 60, type: 'amber' },
+            { cx: 435, cy: 650, r: 82, type: 'green' },
+            { cx: 685, cy: 645, r: 55, type: 'green' },
+            { cx: 935, cy: 640, r: 95, type: 'clear' }
+        ];
+
+        var STYLES = {
+            amber: { c1: '#b45309', c2: '#78350f', stroke: '#451a03', hi: 'rgba(253, 224, 71, 0.45)' },
+            green: { c1: '#15803d', c2: '#064e3b', stroke: '#022c22', hi: 'rgba(167, 243, 208, 0.45)' },
+            clear: { c1: '#64748b', c2: '#334155', stroke: '#1e293b', hi: 'rgba(255, 255, 255, 0.65)' }
+        };
+
+        for (var i = 0; i < shardSpecs.length; i++) {
+            var sp = shardSpecs[i];
+            var st = STYLES[sp.type];
+            var numVerts = 6 + Math.floor(rand() * 4);
+            var pts = [];
+            var aspect = 0.65 + rand() * 0.65;
+            var rot = rand() * Math.PI * 2;
+            var cosR = Math.cos(rot), sinR = Math.sin(rot);
+
+            for (var v = 0; v < numVerts; v++) {
+                var ang = (v / numVerts) * Math.PI * 2 + (rand() - 0.5) * 0.25;
+                var rad = sp.r * (0.68 + rand() * 0.48);
+                var lx = Math.cos(ang) * rad;
+                var ly = Math.sin(ang) * rad * aspect;
+                pts.push({
+                    x: sp.cx + lx * cosR - ly * sinR,
+                    y: sp.cy + lx * sinR + ly * cosR
+                });
+            }
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 5;
+
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (var p = 1; p < pts.length; p++) {
+                ctx.lineTo(pts[p].x, pts[p].y);
+            }
+            ctx.closePath();
+
+            var grad = ctx.createLinearGradient(
+                sp.cx - sp.r, sp.cy - sp.r,
+                sp.cx + sp.r, sp.cy + sp.r
+            );
+            grad.addColorStop(0, st.c1);
+            grad.addColorStop(1, st.c2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            ctx.shadowColor = 'transparent';
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = st.stroke;
+            ctx.stroke();
+
+            // Internal specular facet highlight
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x * 0.7 + sp.cx * 0.3, pts[0].y * 0.7 + sp.cy * 0.3);
+            ctx.lineTo(pts[1].x * 0.75 + sp.cx * 0.25, pts[1].y * 0.75 + sp.cy * 0.25);
+            ctx.lineTo(sp.cx, sp.cy);
+            ctx.closePath();
+            ctx.fillStyle = st.hi;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        return {
+            dataUrl: canvas.toDataURL('image/png'),
+            width: width,
+            height: height,
+            suggestedP1: [120, 40],
+            suggestedP2: [720, 40],
+            suggestedDist: 100,
+            suggestedUnit: 'mm',
+            suggestedExclusion: [{ x: 100, y: 30, width: 950, height: 85 }]
+        };
+    }
+
+    global.CulletEngine = {
+        calibrateFromPoints: calibrateFromPoints,
+        analyzeImageData: analyzeImageData,
+        renderAnnotatedCanvas: renderAnnotatedCanvas,
+        generateSampleImage: generateSampleImage
+    };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+  </script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // Application State
+      const state = {
+        sourceCanvas: null,       // Offscreen canvas holding original loaded image
+        imageWidth: 0,
+        imageHeight: 0,
+        viewMode: 'annotated',    // 'annotated' | 'original' | 'mask'
+        interactionMode: 'none',  // 'none' | 'calib' | 'excl'
+        calibPoints: [],          // [{x, y}, {x, y}]
+        pixelsPerMm: null,
+        exclusionBoxes: [],       // [{x, y, width, height}]
+        dragStart: null,
+        dragCurrent: null,
+        analysisResult: null,
+        zoom: 1,
+      };
+
+      // DOM References
+      const els = {
+        dropZone: document.getElementById('dropZone'),
+        fileInput: document.getElementById('fileInput'),
+        btnLoadSample: document.getElementById('btnLoadSample'),
+        calibrationBadge: document.getElementById('calibrationBadge'),
+        calibScaleText: document.getElementById('calibScaleText'),
+        btnCalibMode: document.getElementById('btnCalibMode'),
+        btnClearCalib: document.getElementById('btnClearCalib'),
+        pt1Display: document.getElementById('pt1Display'),
+        pt2Display: document.getElementById('pt2Display'),
+        knownDistInput: document.getElementById('knownDistInput'),
+        knownUnitSelect: document.getElementById('knownUnitSelect'),
+        exclCountText: document.getElementById('exclCountText'),
+        btnExclMode: document.getElementById('btnExclMode'),
+        btnClearExcl: document.getElementById('btnClearExcl'),
+        methodSelect: document.getElementById('methodSelect'),
+        minAreaSlider: document.getElementById('minAreaSlider'),
+        minAreaVal: document.getElementById('minAreaVal'),
+        watershedToggle: document.getElementById('watershedToggle'),
+        invertToggle: document.getElementById('invertToggle'),
+        btnAnalyze: document.getElementById('btnAnalyze'),
+        statusMsg: document.getElementById('statusMsg'),
+        tabBtns: document.querySelectorAll('.tab-btn'),
+        btnZoomOut: document.getElementById('btnZoomOut'),
+        btnZoomIn: document.getElementById('btnZoomIn'),
+        btnZoomFit: document.getElementById('btnZoomFit'),
+        btnZoom100: document.getElementById('btnZoom100'),
+        zoomLabel: document.getElementById('zoomLabel'),
+        chkFill: document.getElementById('chkFill'),
+        chkIds: document.getElementById('chkIds'),
+        chkBoxes: document.getElementById('chkBoxes'),
+        chkScaleBar: document.getElementById('chkScaleBar'),
+        coordsReadout: document.getElementById('coordsReadout'),
+        canvasStage: document.getElementById('canvasStage'),
+        modeBanner: document.getElementById('modeBanner'),
+        emptyState: document.getElementById('emptyState'),
+        mainCanvas: document.getElementById('mainCanvas'),
+        kpiCount: document.getElementById('kpiCount'),
+        kpiCountSub: document.getElementById('kpiCountSub'),
+        kpiArea: document.getElementById('kpiArea'),
+        kpiAreaSub: document.getElementById('kpiAreaSub'),
+        kpiMeanArea: document.getElementById('kpiMeanArea'),
+        kpiMeanSub: document.getElementById('kpiMeanSub'),
+        kpiD50: document.getElementById('kpiD50'),
+        kpiD10D90: document.getElementById('kpiD10D90'),
+        btnExportCsv: document.getElementById('btnExportCsv'),
+        btnExportJson: document.getElementById('btnExportJson'),
+        btnExportPng: document.getElementById('btnExportPng'),
+        histChart: document.getElementById('histChart'),
+        sieveChart: document.getElementById('sieveChart'),
+        particleTableBody: document.getElementById('particleTableBody'),
+        tableCountBadge: document.getElementById('tableCountBadge'),
+      };
+
+      const mainCtx = els.mainCanvas.getContext('2d');
+
+      function setStatus(msg) {
+        els.statusMsg.textContent = msg;
+      }
+
+      function updateModeUI() {
+        els.btnCalibMode.classList.toggle('btn-active', state.interactionMode === 'calib');
+        els.btnExclMode.classList.toggle('btn-active', state.interactionMode === 'excl');
+        if (state.interactionMode === 'calib') {
+          els.modeBanner.textContent = state.calibPoints.length === 0
+            ? 'Calibration Mode: Click 1st mark on the ruler'
+            : 'Calibration Mode: Click 2nd mark on the ruler';
+          els.modeBanner.classList.add('visible');
+        } else if (state.interactionMode === 'excl') {
+          els.modeBanner.textContent = 'Exclusion Mode: Click & drag a box over the ruler';
+          els.modeBanner.classList.add('visible');
+        } else {
+          els.modeBanner.classList.remove('visible');
+        }
+      }
+
+      function setInteractionMode(mode) {
+        state.interactionMode = (state.interactionMode === mode) ? 'none' : mode;
+        state.dragStart = null;
+        state.dragCurrent = null;
+        updateModeUI();
+      }
+
+      function updateCalibration() {
+        const p1 = state.calibPoints[0];
+        const p2 = state.calibPoints[1];
+        els.pt1Display.textContent = p1 ? `${Math.round(p1.x)},${Math.round(p1.y)}` : '-';
+        els.pt2Display.textContent = p2 ? `${Math.round(p2.x)},${Math.round(p2.y)}` : '-';
+
+        if (p1 && p2 && window.CulletEngine) {
+          const dist = parseFloat(els.knownDistInput.value) || 0;
+          const unit = els.knownUnitSelect.value;
+          if (dist > 0) {
+            const res = window.CulletEngine.calibrateFromPoints(p1, p2, dist, unit);
+            state.pixelsPerMm = res.pixelsPerMm;
+            els.calibScaleText.textContent = `${res.pixelsPerMm.toFixed(2)} px/mm`;
+            els.calibrationBadge.className = 'badge badge-emerald';
+            els.calibrationBadge.textContent = `Calibrated: ${res.pixelsPerMm.toFixed(2)} px/mm`;
+            return;
+          }
+        }
+        state.pixelsPerMm = null;
+        els.calibScaleText.textContent = '0.00 px/mm';
+        els.calibrationBadge.className = 'badge badge-amber';
+        els.calibrationBadge.textContent = 'Ruler Uncalibrated';
+      }
+
+      function updateExclusionUI() {
+        const n = state.exclusionBoxes.length;
+        els.exclCountText.textContent = `${n} ${n === 1 ? 'box' : 'boxes'}`;
+      }
+
+      function setZoom(newZoom) {
+        if (!state.sourceCanvas) return;
+        state.zoom = Math.max(0.15, Math.min(4, newZoom));
+        els.mainCanvas.style.width = `${Math.round(state.imageWidth * state.zoom)}px`;
+        els.mainCanvas.style.height = `${Math.round(state.imageHeight * state.zoom)}px`;
+        els.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
+      }
+
+      function fitZoom() {
+        if (!state.sourceCanvas) return;
+        const pad = 28;
+        const availW = Math.max(200, els.canvasStage.clientWidth - pad);
+        const availH = Math.max(200, els.canvasStage.clientHeight - pad);
+        const scale = Math.min(availW / state.imageWidth, availH / state.imageHeight, 1);
+        setZoom(scale);
+      }
+
+      function loadImageToState(img) {
+        const off = document.createElement('canvas');
+        off.width = img.width;
+        off.height = img.height;
+        off.getContext('2d').drawImage(img, 0, 0);
+
+        state.sourceCanvas = off;
+        state.imageWidth = img.width;
+        state.imageHeight = img.height;
+        state.analysisResult = null;
+
+        els.mainCanvas.width = img.width;
+        els.mainCanvas.height = img.height;
+        els.mainCanvas.hidden = false;
+        els.emptyState.hidden = true;
+        els.btnAnalyze.disabled = false;
+
+        resetResultsUI();
+        fitZoom();
+        renderViewport();
+      }
+
+      function loadFromDataUrl(url, onLoaded) {
+        const img = new Image();
+        img.onload = () => {
+          loadImageToState(img);
+          if (onLoaded) onLoaded();
+        };
+        img.src = url;
+      }
+
+      function handleFile(file) {
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          state.calibPoints = [];
+          state.exclusionBoxes = [];
+          updateCalibration();
+          updateExclusionUI();
+          loadFromDataUrl(e.target.result, () => {
+            setStatus(`Loaded ${file.name} (${state.imageWidth}×${state.imageHeight}).`);
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function renderViewport() {
+        if (!state.sourceCanvas) return;
+        const w = state.imageWidth;
+        const h = state.imageHeight;
+        mainCtx.clearRect(0, 0, w, h);
+
+        if (state.viewMode === 'mask' && state.analysisResult && state.analysisResult.maskImageData) {
+          mainCtx.putImageData(state.analysisResult.maskImageData, 0, 0);
+        } else if (state.viewMode === 'annotated' && state.analysisResult && window.CulletEngine) {
+          window.CulletEngine.renderAnnotatedCanvas(
+            els.mainCanvas,
+            state.sourceCanvas,
+            state.analysisResult,
+            {
+              calibPoints: state.calibPoints,
+              exclusionBoxes: state.exclusionBoxes,
+              showFill: els.chkFill.checked,
+              showIds: els.chkIds.checked,
+              showBoxes: els.chkBoxes.checked,
+              showScaleBar: els.chkScaleBar.checked,
+            }
+          );
+        } else {
+          mainCtx.drawImage(state.sourceCanvas, 0, 0);
+          drawInteractiveOverlays();
+        }
+
+        // Draw live drag preview for exclusion box
+        if (state.interactionMode === 'excl' && state.dragStart && state.dragCurrent) {
+          const rx = Math.min(state.dragStart.x, state.dragCurrent.x);
+          const ry = Math.min(state.dragStart.y, state.dragCurrent.y);
+          const rw = Math.abs(state.dragCurrent.x - state.dragStart.x);
+          const rh = Math.abs(state.dragCurrent.y - state.dragStart.y);
+          mainCtx.save();
+          mainCtx.strokeStyle = '#f59e0b';
+          mainCtx.lineWidth = 2;
+          mainCtx.setLineDash([6, 4]);
+          mainCtx.strokeRect(rx, ry, rw, rh);
+          mainCtx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+          mainCtx.fillRect(rx, ry, rw, rh);
+          mainCtx.restore();
+        }
+      }
+
+      function drawInteractiveOverlays() {
+        // Draw exclusion boxes and calibration points when viewing original or before analysis
+        mainCtx.save();
+        for (const box of state.exclusionBoxes) {
+          mainCtx.strokeStyle = '#f59e0b';
+          mainCtx.lineWidth = 2;
+          mainCtx.setLineDash([6, 4]);
+          mainCtx.strokeRect(box.x, box.y, box.width, box.height);
+          mainCtx.fillStyle = 'rgba(245, 158, 11, 0.12)';
+          mainCtx.fillRect(box.x, box.y, box.width, box.height);
+        }
+        mainCtx.setLineDash([]);
+
+        if (state.calibPoints.length > 0) {
+          if (state.calibPoints.length === 2) {
+            mainCtx.strokeStyle = '#38bdf8';
+            mainCtx.lineWidth = 2.5;
+            mainCtx.beginPath();
+            mainCtx.moveTo(state.calibPoints[0].x, state.calibPoints[0].y);
+            mainCtx.lineTo(state.calibPoints[1].x, state.calibPoints[1].y);
+            mainCtx.stroke();
+          }
+          state.calibPoints.forEach((pt, idx) => {
+            mainCtx.fillStyle = '#38bdf8';
+            mainCtx.beginPath();
+            mainCtx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+            mainCtx.fill();
+            mainCtx.strokeStyle = '#0f172a';
+            mainCtx.lineWidth = 1.5;
+            mainCtx.stroke();
+            mainCtx.fillStyle = '#e0f2fe';
+            mainCtx.font = 'bold 12px sans-serif';
+            mainCtx.fillText(`P${idx + 1}`, pt.x + 8, pt.y - 6);
+          });
+        }
+        mainCtx.restore();
+      }
+
+      function getCanvasCoords(e) {
+        const rect = els.mainCanvas.getBoundingClientRect();
+        const scaleX = els.mainCanvas.width / rect.width;
+        const scaleY = els.mainCanvas.height / rect.height;
+        return {
+          x: Math.max(0, Math.min(els.mainCanvas.width, (e.clientX - rect.left) * scaleX)),
+          y: Math.max(0, Math.min(els.mainCanvas.height, (e.clientY - rect.top) * scaleY)),
+        };
+      }
+
+      function runAnalysis() {
+        if (!state.sourceCanvas || !window.CulletEngine) {
+          setStatus('CV engine or image not ready.');
+          return;
+        }
+        setStatus('Analyzing cullet particles...');
+        els.btnAnalyze.disabled = true;
+
+        requestAnimationFrame(() => {
+          try {
+            const ctx = state.sourceCanvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, state.imageWidth, state.imageHeight);
+            const options = {
+              pixelsPerMm: state.pixelsPerMm,
+              exclusionBoxes: state.exclusionBoxes,
+              method: els.methodSelect.value,
+              invertThreshold: els.invertToggle.checked,
+              minAreaPx: parseInt(els.minAreaSlider.value, 10) || 60,
+              enableWatershed: els.watershedToggle.checked,
+            };
+            const result = window.CulletEngine.analyzeImageData(imageData, options);
+            state.analysisResult = result;
+            state.viewMode = 'annotated';
+            updateTabButtons();
+            renderViewport();
+            updateResultsUI(result);
+            setStatus(`Done: ${result.report.totalParticles} particles detected.`);
+          } catch (err) {
+            console.error(err);
+            setStatus(`Error: ${err.message}`);
+          } finally {
+            els.btnAnalyze.disabled = false;
+          }
+        });
+      }
+
+      function updateTabButtons() {
+        els.tabBtns.forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.view === state.viewMode);
+        });
+      }
+
+      function resetResultsUI() {
+        els.kpiCount.textContent = '-';
+        els.kpiCountSub.textContent = 'particles detected';
+        els.kpiArea.textContent = '-';
+        els.kpiAreaSub.textContent = 'cm² / mm²';
+        els.kpiMeanArea.textContent = '-';
+        els.kpiMeanSub.textContent = 'mean eq. diam: -';
+        els.kpiD50.textContent = '-';
+        els.kpiD10D90.textContent = 'D10: - | D90: -';
+        els.tableCountBadge.textContent = '0 rows';
+        els.particleTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:18px; font-family:var(--font-sans);">Run analysis to view particle measurements.</td></tr>';
+        els.btnExportCsv.disabled = true;
+        els.btnExportJson.disabled = true;
+        els.btnExportPng.disabled = true;
+        clearChart(els.histChart, 'No data');
+        clearChart(els.sieveChart, 'No data');
+      }
+
+      function updateResultsUI(result) {
+        const r = result.report || {};
+        const calibrated = state.pixelsPerMm && state.pixelsPerMm > 0;
+
+        els.kpiCount.textContent = r.totalParticles ?? 0;
+        els.kpiCountSub.textContent = calibrated ? 'calibrated mm scale' : 'pixel scale (uncalibrated)';
+
+        if (calibrated) {
+          els.kpiArea.textContent = `${(r.totalAreaCm2 || 0).toFixed(2)} cm²`;
+          els.kpiAreaSub.textContent = `${(r.totalAreaMm2 || 0).toFixed(1)} mm²`;
+          els.kpiMeanArea.textContent = `${(r.meanAreaMm2 || 0).toFixed(1)} mm²`;
+          els.kpiMeanSub.textContent = `mean Ø: ${(r.meanEqDiamMm || 0).toFixed(2)} mm`;
+          els.kpiD50.textContent = `${(r.d50Mm || 0).toFixed(2)} mm`;
+          els.kpiD10D90.textContent = `D10: ${(r.d10Mm || 0).toFixed(1)} | D90: ${(r.d90Mm || 0).toFixed(1)} mm`;
+        } else {
+          const totalPx = (result.particles || []).reduce((s, p) => s + (p.area_px || 0), 0);
+          const meanPx = result.particles && result.particles.length ? totalPx / result.particles.length : 0;
+          els.kpiArea.textContent = `${Math.round(totalPx)} px²`;
+          els.kpiAreaSub.textContent = 'calibrate ruler for cm²';
+          els.kpiMeanArea.textContent = `${Math.round(meanPx)} px²`;
+          els.kpiMeanSub.textContent = 'calibrate ruler for mm';
+          els.kpiD50.textContent = 'N/A';
+          els.kpiD10D90.textContent = 'Calibrate ruler for D10/D50/D90';
+        }
+
+        els.btnExportCsv.disabled = false;
+        els.btnExportJson.disabled = false;
+        els.btnExportPng.disabled = false;
+
+        renderParticleTable(result.particles || [], calibrated);
+        drawHistogram(els.histChart, r);
+        drawSieveCurve(els.sieveChart, r);
+      }
+
+      function renderParticleTable(particles, calibrated) {
+        els.tableCountBadge.textContent = `${particles.length} rows`;
+        if (!particles.length) {
+          els.particleTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:18px; font-family:var(--font-sans);">No particles detected.</td></tr>';
+          return;
+        }
+        const rows = particles.map((p, idx) => {
+          const id = p.id ?? (idx + 1);
+          const area = calibrated && p.area_mm2 != null ? p.area_mm2.toFixed(1) : `${Math.round(p.area_px || 0)}px`;
+          const eqD = calibrated && p.equivalent_diameter_mm != null ? p.equivalent_diameter_mm.toFixed(2) : `${(p.equivalent_diameter_px || 0).toFixed(1)}px`;
+          const maj = calibrated && p.major_axis_mm != null ? p.major_axis_mm.toFixed(1) : (p.major_axis_px || 0).toFixed(0);
+          const min = calibrated && p.minor_axis_mm != null ? p.minor_axis_mm.toFixed(1) : (p.minor_axis_px || 0).toFixed(0);
+          const circ = (p.circularity ?? 0).toFixed(2);
+          const cls = p.sizeClass || p.size_class || 'N/A';
+          return `<tr>
+            <td>${id}</td>
+            <td>${area}</td>
+            <td>${eqD}</td>
+            <td>${maj}×${min}</td>
+            <td>${circ}</td>
+            <td><span class="pill pill-${cls}">${cls}</span></td>
+          </tr>`;
+        }).join('');
+        els.particleTableBody.innerHTML = rows;
+      }
+
+      function setupHiDpiCanvas(canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = Math.max(260, rect.width || 340);
+        const h = Math.max(130, rect.height || 145);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { ctx, w, h };
+      }
+
+      function clearChart(canvas, msg) {
+        const { ctx, w, h } = setupHiDpiCanvas(canvas);
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(msg, w / 2, h / 2);
+      }
+
+      function drawHistogram(canvas, report) {
+        const counts = report.histogramCounts || [];
+        const bins = report.histogramBins || [];
+        if (!counts.length) {
+          clearChart(canvas, 'Calibrate & analyze to view histogram');
+          return;
+        }
+        const { ctx, w, h } = setupHiDpiCanvas(canvas);
+        const pad = { top: 10, right: 10, bottom: 26, left: 30 };
+        const pw = w - pad.left - pad.right;
+        const ph = h - pad.top - pad.bottom;
+        const maxC = Math.max(1, ...counts);
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = pad.top + (ph * i) / 4;
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(w - pad.right, y);
+          ctx.stroke();
+        }
+
+        const barW = pw / counts.length;
+        counts.forEach((c, i) => {
+          const bh = (c / maxC) * ph;
+          const x = pad.left + i * barW + 2;
+          const y = pad.top + ph - bh;
+          ctx.fillStyle = '#059669';
+          ctx.fillRect(x, y, Math.max(2, barW - 4), bh);
+
+          if (bins[i] !== undefined) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(bins[i]), x + (barW - 4) / 2, h - 8);
+          }
+        });
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(String(maxC), pad.left - 4, pad.top + 8);
+        ctx.fillText('0', pad.left - 4, pad.top + ph);
+      }
+
+      function drawSieveCurve(canvas, report) {
+        const curve = report.sieveCurve || [];
+        if (!curve.length) {
+          clearChart(canvas, 'Calibrate & analyze to view sieve curve');
+          return;
+        }
+        const { ctx, w, h } = setupHiDpiCanvas(canvas);
+        const pad = { top: 10, right: 14, bottom: 26, left: 32 };
+        const pw = w - pad.left - pad.right;
+        const ph = h - pad.top - pad.bottom;
+
+        const maxSieve = Math.max(1, ...curve.map(pt => pt.sizeMm ?? pt.sieveMm ?? pt.x ?? 0));
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = pad.top + (ph * i) / 4;
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(w - pad.right, y);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        curve.forEach((pt, idx) => {
+          const sizeVal = pt.sizeMm ?? pt.sieveMm ?? pt.x ?? 0;
+          const pctVal = pt.percentPassing ?? pt.passingPct ?? pt.y ?? 0;
+          const x = pad.left + (sizeVal / maxSieve) * pw;
+          const y = pad.top + ph - (pctVal / 100) * ph;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Points
+        ctx.fillStyle = '#0ea5e9';
+        curve.forEach((pt) => {
+          const sizeVal = pt.sizeMm ?? pt.sieveMm ?? pt.x ?? 0;
+          const pctVal = pt.percentPassing ?? pt.passingPct ?? pt.y ?? 0;
+          const x = pad.left + (sizeVal / maxSieve) * pw;
+          const y = pad.top + ph - (pctVal / 100) * ph;
+          ctx.beginPath();
+          ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('100%', pad.left - 4, pad.top + 8);
+        ctx.fillText('0%', pad.left - 4, pad.top + ph);
+        ctx.textAlign = 'center';
+        ctx.fillText('0', pad.left, h - 8);
+        ctx.fillText(`${Math.round(maxSieve)}mm`, w - pad.right - 8, h - 8);
+      }
+
+      function downloadBlob(filename, content, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function exportCsv() {
+        if (!state.analysisResult) return;
+        const particles = state.analysisResult.particles || [];
+        const headers = ['id', 'area_px', 'area_mm2', 'equivalent_diameter_px', 'equivalent_diameter_mm', 'major_axis_mm', 'minor_axis_mm', 'circularity', 'size_class', 'centroid_x', 'centroid_y'];
+        const lines = [headers.join(',')];
+        particles.forEach((p, idx) => {
+          lines.push([
+            p.id ?? (idx + 1),
+            p.area_px ?? '',
+            p.area_mm2 != null ? p.area_mm2.toFixed(3) : '',
+            p.equivalent_diameter_px != null ? p.equivalent_diameter_px.toFixed(2) : '',
+            p.equivalent_diameter_mm != null ? p.equivalent_diameter_mm.toFixed(3) : '',
+            p.major_axis_mm != null ? p.major_axis_mm.toFixed(3) : '',
+            p.minor_axis_mm != null ? p.minor_axis_mm.toFixed(3) : '',
+            p.circularity != null ? p.circularity.toFixed(4) : '',
+            p.sizeClass ?? p.size_class ?? '',
+            p.centroid ? p.centroid.x.toFixed(1) : '',
+            p.centroid ? p.centroid.y.toFixed(1) : '',
+          ].join(','));
+        });
+        downloadBlob('cullet_measurements.csv', lines.join('\n'), 'text/csv;charset=utf-8;');
+      }
+
+      function exportJson() {
+        if (!state.analysisResult) return;
+        const payload = {
+          pixelsPerMm: state.pixelsPerMm,
+          report: state.analysisResult.report,
+          particles: (state.analysisResult.particles || []).map(p => ({
+            id: p.id,
+            area_px: p.area_px,
+            area_mm2: p.area_mm2,
+            equivalent_diameter_mm: p.equivalent_diameter_mm,
+            major_axis_mm: p.major_axis_mm,
+            minor_axis_mm: p.minor_axis_mm,
+            circularity: p.circularity,
+            size_class: p.sizeClass ?? p.size_class,
+            centroid: p.centroid,
+          })),
+        };
+        downloadBlob('cullet_summary.json', JSON.stringify(payload, null, 2), 'application/json');
+      }
+
+      function exportPng() {
+        if (!state.sourceCanvas) return;
+        const prevView = state.viewMode;
+        state.viewMode = 'annotated';
+        renderViewport();
+        const url = els.mainCanvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cullet_annotated.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        state.viewMode = prevView;
+        renderViewport();
+      }
+
+      // Event Listeners
+      els.dropZone.addEventListener('click', () => els.fileInput.click());
+      els.dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); els.fileInput.click(); }
+      });
+      els.fileInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) handleFile(e.target.files[0]);
+      });
+      els.dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        els.dropZone.classList.add('drag-over');
+      });
+      els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('drag-over'));
+      els.dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        els.dropZone.classList.remove('drag-over');
+        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+      });
+
+      els.btnLoadSample.addEventListener('click', () => {
+        if (!window.CulletEngine || typeof window.CulletEngine.generateSampleImage !== 'function') {
+          setStatus('CV engine not loaded yet.');
+          return;
+        }
+        const sample = window.CulletEngine.generateSampleImage();
+        state.calibPoints = [
+          { x: sample.suggestedP1[0], y: sample.suggestedP1[1] },
+          { x: sample.suggestedP2[0], y: sample.suggestedP2[1] },
+        ];
+        els.knownDistInput.value = sample.suggestedDist;
+        els.knownUnitSelect.value = sample.suggestedUnit;
+        state.exclusionBoxes = (sample.suggestedExclusion || []).map(b => ({ ...b }));
+        updateCalibration();
+        updateExclusionUI();
+        loadFromDataUrl(sample.dataUrl, () => {
+          setStatus('Sample cullet loaded with suggested ruler calibration & exclusion box.');
+          runAnalysis();
+        });
+      });
+
+      els.btnCalibMode.addEventListener('click', () => setInteractionMode('calib'));
+      els.btnClearCalib.addEventListener('click', () => {
+        state.calibPoints = [];
+        state.interactionMode = 'none';
+        updateModeUI();
+        updateCalibration();
+        renderViewport();
+      });
+      els.knownDistInput.addEventListener('input', updateCalibration);
+      els.knownUnitSelect.addEventListener('change', updateCalibration);
+
+      els.btnExclMode.addEventListener('click', () => setInteractionMode('excl'));
+      els.btnClearExcl.addEventListener('click', () => {
+        state.exclusionBoxes = [];
+        updateExclusionUI();
+        renderViewport();
+      });
+
+      els.minAreaSlider.addEventListener('input', () => {
+        els.minAreaVal.textContent = `${els.minAreaSlider.value} px`;
+      });
+
+      els.btnAnalyze.addEventListener('click', runAnalysis);
+
+      els.tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.viewMode = btn.dataset.view;
+          updateTabButtons();
+          renderViewport();
+        });
+      });
+
+      els.btnZoomIn.addEventListener('click', () => setZoom(state.zoom * 1.25));
+      els.btnZoomOut.addEventListener('click', () => setZoom(state.zoom / 1.25));
+      els.btnZoomFit.addEventListener('click', fitZoom);
+      els.btnZoom100.addEventListener('click', () => setZoom(1));
+
+      [els.chkFill, els.chkIds, els.chkBoxes, els.chkScaleBar].forEach(chk => {
+        chk.addEventListener('change', renderViewport);
+      });
+
+      els.mainCanvas.addEventListener('mousedown', (e) => {
+        if (!state.sourceCanvas) return;
+        const pt = getCanvasCoords(e);
+
+        if (state.interactionMode === 'calib') {
+          if (state.calibPoints.length >= 2) state.calibPoints = [];
+          state.calibPoints.push(pt);
+          if (state.calibPoints.length === 2) {
+            state.interactionMode = 'none';
+          }
+          updateModeUI();
+          updateCalibration();
+          renderViewport();
+        } else if (state.interactionMode === 'excl') {
+          state.dragStart = pt;
+          state.dragCurrent = pt;
+        }
+      });
+
+      els.mainCanvas.addEventListener('mousemove', (e) => {
+        if (!state.sourceCanvas) return;
+        const pt = getCanvasCoords(e);
+        const mmInfo = state.pixelsPerMm
+          ? ` (${(pt.x / state.pixelsPerMm).toFixed(1)}, ${(pt.y / state.pixelsPerMm).toFixed(1)} mm)`
+          : '';
+        els.coordsReadout.textContent = `X: ${Math.round(pt.x)}, Y: ${Math.round(pt.y)}${mmInfo}`;
+
+        if (state.interactionMode === 'excl' && state.dragStart) {
+          state.dragCurrent = pt;
+          renderViewport();
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (state.interactionMode === 'excl' && state.dragStart && state.dragCurrent) {
+          const x = Math.min(state.dragStart.x, state.dragCurrent.x);
+          const y = Math.min(state.dragStart.y, state.dragCurrent.y);
+          const width = Math.abs(state.dragCurrent.x - state.dragStart.x);
+          const height = Math.abs(state.dragCurrent.y - state.dragStart.y);
+          if (width > 8 && height > 8) {
+            state.exclusionBoxes.push({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+            updateExclusionUI();
+          }
+          state.dragStart = null;
+          state.dragCurrent = null;
+          state.interactionMode = 'none';
+          updateModeUI();
+          renderViewport();
+        }
+      });
+
+      els.btnExportCsv.addEventListener('click', exportCsv);
+      els.btnExportJson.addEventListener('click', exportJson);
+      els.btnExportPng.addEventListener('click', exportPng);
+
+      // Initial empty chart render
+      clearChart(els.histChart, 'No data');
+      clearChart(els.sieveChart, 'No data');
+    })();
+  </script>
+</body>
+</html>
