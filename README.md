@@ -4,7 +4,7 @@ A single-file, offline-ready web application for measuring glass cullet area, di
 
 ## How to Run
 
-Double-click **`Cullet_Size_Identifier.html`** to open it in any modern web browser (Chrome, Edge, Firefox). No installation, Python, or internet connection is required.
+Double-click **`index.html`** to open it in any modern web browser (Chrome, Edge, Firefox). No installation, Python, or internet connection is required.
 
 ## Quick Workflow
 
