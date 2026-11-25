@@ -753,6 +753,10 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 3H6.8A2 2 0 0 1 5 17l4-9V3z"/></svg>
         Load IMG_5468 Model (1 cm Grid)
       </button>
+      <button id="btnReset" class="btn btn-sm" title="Clear image, ruler, exclusions, and results">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Reset
+      </button>
       <div id="calibrationBadge" class="badge badge-amber">Ruler Uncalibrated</div>
     </div>
   </header>
@@ -859,6 +863,10 @@
             </div>
             <input type="range" id="minAreaSlider" min="50" max="3000" step="25" value="500">
           </div>
+          <label class="check-row">
+            <span>Remove Shadows (Flatten Lighting)</span>
+            <input type="checkbox" id="shadowRemovalToggle" checked>
+          </label>
           <label class="check-row">
             <span>Split Touching Pieces</span>
             <input type="checkbox" id="watershedToggle" checked>
@@ -2430,7 +2438,7 @@
             }
             return offs;
         }
-        var disk2 = makeDisk(2), disk3 = makeDisk(3), disk10 = makeDisk(10);
+        var disk1 = makeDisk(1), disk2 = makeDisk(2), disk3 = makeDisk(3), disk6 = makeDisk(6);
 
         function morphDisk(src, bw, bh, disk, isDilate) {
             var dst = new Uint8Array(bw * bh);
@@ -2507,7 +2515,7 @@
             return pts;
         }
 
-        var gK = 23, gHalf = 11, gSigma = 5.0, gWeights = new Float32Array(gK), gSum = 0;
+        var gK = 19, gHalf = 9, gSigma = 4.0, gWeights = new Float32Array(gK), gSum = 0;
         for (var gi = 0; gi < gK; gi++) {
             var gd = gi - gHalf;
             gWeights[gi] = Math.exp(-(gd * gd) / (2 * gSigma * gSigma));
@@ -2573,10 +2581,13 @@
             }
             var otherDil = morphDisk(other, bw, bh, disk3, true);
 
-            pmask = morphDisk(morphDisk(pmask, bw, bh, disk2, false), bw, bh, disk2, true);
+            // Strip cScore 5x5 dilation halo first, then snap pixel-by-pixel to the true un-dilated glass bevel edge
+            pmask = morphDisk(pmask, bw, bh, disk2, false);
+            pmask = morphDisk(pmask, bw, bh, disk1, true);
 
-            for (var pass = 0; pass < 2; pass++) {
-                var dil = morphDisk(pmask, bw, bh, pass === 0 ? disk3 : disk2, true);
+            for (var pass = 0; pass < 4; pass++) {
+                var dil = morphDisk(pmask, bw, bh, disk1, true);
+                var grew = 0;
                 for (var ly2 = 0; ly2 < bh; ly2++) {
                     var gy3 = by0 + ly2, gRow2 = gy3 * width, lRow2 = ly2 * bw;
                     for (var lx2 = 0; lx2 < bw; lx2++) {
@@ -2584,17 +2595,21 @@
                         if (pmask[lIdx] || !dil[lIdx] || otherDil[lIdx]) continue;
                         var gx3 = bx0 + lx2, gIdx2 = gRow2 + gx3;
                         if (gy3 >= pMaxY - 11 && belowHBevel[gIdx2] && !horizDarkBevel[gIdx2]) continue;
-                        var lVal = lum[gIdx2], bgVal = bgLum[gIdx2], cVal = chroma[gIdx2], gVal = gradMag[gIdx2];
-                        if ((lVal > bgVal + 2.2) || (cVal > 1.8 && lVal > bgVal - 10) || (gx3 > meanX && gVal >= 16.0 && lVal < bgVal - 6)) {
+                        var lVal = symL[gIdx2], bgVal = bgLum[gIdx2], cVal = symC[gIdx2], gVal = gradMag[gIdx2];
+                        if ((cVal > 2.8 && lVal > bgVal - 14) || (lVal > bgVal + 4.5) || (gVal >= 22.0 && bgVal - lVal > 10.0)) {
                             pmask[lIdx] = 1;
+                            grew++;
                         }
                     }
                 }
+                if (grew === 0) break;
             }
 
-            pmask = morphDisk(pmask, bw, bh, disk10, true);
+            // Remove 1px grid-crossing spurs, then smooth edges with 13x13 rolling-ball closing
+            pmask = morphDisk(morphDisk(pmask, bw, bh, disk1, false), bw, bh, disk1, true);
+            pmask = morphDisk(pmask, bw, bh, disk6, true);
             fillHolesLocal(pmask, bw, bh);
-            pmask = morphDisk(pmask, bw, bh, disk10, false);
+            pmask = morphDisk(pmask, bw, bh, disk6, false);
             fillHolesLocal(pmask, bw, bh);
             for (var mi = 0; mi < bw * bh; mi++) if (otherDil[mi]) pmask[mi] = 0;
 
@@ -2997,8 +3012,117 @@
         };
     }
 
+    /**
+     * O(N) luminance-preserving shadow removal (separable sliding-window local max + box blur).
+     * Lifts cast shadows & uneven lighting to a uniform bright surface while preserving cullet chroma.
+     */
+    function removeShadows(imageData) {
+        if (!imageData || !imageData.data || !imageData.width || !imageData.height) {
+            return imageData;
+        }
+        var width = imageData.width;
+        var height = imageData.height;
+        var src = imageData.data;
+        var n = width * height;
+
+        var lum = new Float32Array(n);
+        for (var i = 0; i < n; i++) {
+            var p = i << 2;
+            lum[i] = 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
+        }
+
+        // 1. Separable 1D sliding maximum (radius = 45 -> 91x91 window) in O(N) via monotonic deque
+        var dilR = 45;
+        var maxH = new Float32Array(n);
+        var bgMax = new Float32Array(n);
+        var maxDim = Math.max(width, height);
+        var deq = new Int32Array(maxDim);
+
+        for (var y = 0; y < height; y++) {
+            var rowOff = y * width;
+            var head = 0, tail = 0;
+            for (var x = 0; x < width + dilR; x++) {
+                if (x < width) {
+                    var val = lum[rowOff + x];
+                    while (tail > head && lum[rowOff + deq[tail - 1]] <= val) tail--;
+                    deq[tail++] = x;
+                }
+                var outX = x - dilR;
+                if (outX >= 0) {
+                    while (head < tail && deq[head] < outX - dilR) head++;
+                    maxH[rowOff + outX] = lum[rowOff + deq[head]];
+                }
+            }
+        }
+
+        for (var x2 = 0; x2 < width; x2++) {
+            var head2 = 0, tail2 = 0;
+            for (var y2 = 0; y2 < height + dilR; y2++) {
+                if (y2 < height) {
+                    var val2 = maxH[y2 * width + x2];
+                    while (tail2 > head2 && maxH[deq[tail2 - 1] * width + x2] <= val2) tail2--;
+                    deq[tail2++] = y2;
+                }
+                var outY = y2 - dilR;
+                if (outY >= 0) {
+                    while (head2 < tail2 && deq[head2] < outY - dilR) head2++;
+                    bgMax[outY * width + x2] = maxH[deq[head2] * width + x2];
+                }
+            }
+        }
+
+        // 2. Smooth background surface via 2D integral image (radius = 35 -> 71x71 box filter)
+        var w1 = width + 1;
+        var integ = new Float64Array(w1 * (height + 1));
+        for (var iy = 0; iy < height; iy++) {
+            var rSum = 0;
+            var rOff = iy * width;
+            var iRow = (iy + 1) * w1;
+            var pRow = iy * w1;
+            for (var ix = 0; ix < width; ix++) {
+                rSum += bgMax[rOff + ix];
+                integ[iRow + ix + 1] = integ[pRow + ix + 1] + rSum;
+            }
+        }
+
+        var blurR = 35;
+        var targetLum = 238.0;
+        var out = new Uint8ClampedArray(n * 4);
+
+        for (var by = 0; by < height; by++) {
+            var y0 = Math.max(0, by - blurR);
+            var y1 = Math.min(height - 1, by + blurR);
+            var bRow = by * width;
+            for (var bx = 0; bx < width; bx++) {
+                var x0 = Math.max(0, bx - blurR);
+                var x1 = Math.min(width - 1, bx + blurR);
+                var area = (x1 - x0 + 1) * (y1 - y0 + 1);
+                var bgSmooth = (integ[(y1 + 1) * w1 + (x1 + 1)] - integ[y0 * w1 + (x1 + 1)] - integ[(y1 + 1) * w1 + x0] + integ[y0 * w1 + x0]) / area;
+
+                var gain = 1.0;
+                if (bgSmooth > 55.0) {
+                    gain = targetLum / Math.max(30.0, bgSmooth);
+                    if (gain < 0.85) gain = 0.85;
+                    else if (gain > 2.5) gain = 2.5;
+                }
+
+                var idx = (bRow + bx) << 2;
+                var r = src[idx] * gain;
+                var g = src[idx + 1] * gain;
+                var b = src[idx + 2] * gain;
+                out[idx] = r > 255 ? 255 : (r < 0 ? 0 : r);
+                out[idx + 1] = g > 255 ? 255 : (g < 0 ? 0 : g);
+                out[idx + 2] = b > 255 ? 255 : (b < 0 ? 0 : b);
+                out[idx + 3] = 255;
+            }
+        }
+
+        return { width: width, height: height, data: out };
+    }
+
     global.CulletEngine = {
         calibrateFromPoints: calibrateFromPoints,
+        removeShadows: removeShadows,
         analyzeImageData: analyzeImageData,
         renderAnnotatedCanvas: renderAnnotatedCanvas,
         generateSampleImage: generateSampleImage,
@@ -3015,6 +3139,7 @@
       // Application State
       const state = {
         sourceCanvas: null,       // Offscreen canvas holding original loaded image
+        shadowFreeCanvas: null,   // Cached shadow-removed canvas for current image
         imageWidth: 0,
         imageHeight: 0,
         viewMode: 'annotated',    // 'annotated' | 'original' | 'mask'
@@ -3033,6 +3158,7 @@
         dropZone: document.getElementById('dropZone'),
         fileInput: document.getElementById('fileInput'),
         btnLoadSample: document.getElementById('btnLoadSample'),
+        btnReset: document.getElementById('btnReset'),
         calibrationBadge: document.getElementById('calibrationBadge'),
         calibScaleText: document.getElementById('calibScaleText'),
         btnCalibMode: document.getElementById('btnCalibMode'),
@@ -3048,6 +3174,7 @@
         methodSelect: document.getElementById('methodSelect'),
         minAreaSlider: document.getElementById('minAreaSlider'),
         minAreaVal: document.getElementById('minAreaVal'),
+        shadowRemovalToggle: document.getElementById('shadowRemovalToggle'),
         watershedToggle: document.getElementById('watershedToggle'),
         invertToggle: document.getElementById('invertToggle'),
         btnAnalyze: document.getElementById('btnAnalyze'),
@@ -3160,18 +3287,30 @@
       }
 
       function loadImageToState(img) {
+        const maxDim = 1400;
+        let targetW = img.naturalWidth || img.width;
+        let targetH = img.naturalHeight || img.height;
+        if (Math.max(targetW, targetH) > maxDim) {
+          const scale = maxDim / Math.max(targetW, targetH);
+          targetW = Math.round(targetW * scale);
+          targetH = Math.round(targetH * scale);
+        }
+
         const off = document.createElement('canvas');
-        off.width = img.width;
-        off.height = img.height;
-        off.getContext('2d').drawImage(img, 0, 0);
+        off.width = targetW;
+        off.height = targetH;
+        off.getContext('2d').drawImage(img, 0, 0, targetW, targetH);
 
         state.sourceCanvas = off;
-        state.imageWidth = img.width;
-        state.imageHeight = img.height;
+        state.shadowFreeCanvas = null;
+        state.imageWidth = targetW;
+        state.imageHeight = targetH;
         state.analysisResult = null;
+        state.viewMode = 'annotated';
+        updateTabButtons();
 
-        els.mainCanvas.width = img.width;
-        els.mainCanvas.height = img.height;
+        els.mainCanvas.width = targetW;
+        els.mainCanvas.height = targetH;
         els.mainCanvas.hidden = false;
         els.emptyState.hidden = true;
         els.btnAnalyze.disabled = false;
@@ -3179,6 +3318,50 @@
         resetResultsUI();
         fitZoom();
         renderViewport();
+      }
+
+      function updateDropZoneLabel(title, subtitle) {
+        const pEl = els.dropZone.querySelector('p');
+        const sEl = els.dropZone.querySelector('small');
+        if (pEl) pEl.textContent = title;
+        if (sEl) sEl.textContent = subtitle;
+      }
+
+      function resetWorkspace() {
+        state.sourceCanvas = null;
+        state.shadowFreeCanvas = null;
+        state.imageWidth = 0;
+        state.imageHeight = 0;
+        state.interactionMode = 'none';
+        state.calibPoints = [];
+        state.pixelsPerMm = null;
+        state.exclusionBoxes = [];
+        state.dragStart = null;
+        state.dragCurrent = null;
+        state.analysisResult = null;
+        state.viewMode = 'annotated';
+        state.zoom = 1;
+
+        els.fileInput.value = '';
+        els.knownDistInput.value = 10;
+        els.knownUnitSelect.value = 'cm';
+        els.minAreaSlider.value = 500;
+        els.minAreaVal.textContent = '500 px';
+        els.mainCanvas.width = 0;
+        els.mainCanvas.height = 0;
+        els.mainCanvas.hidden = true;
+        els.emptyState.hidden = false;
+        els.btnAnalyze.disabled = true;
+        els.zoomLabel.textContent = '100%';
+        els.coordsReadout.textContent = 'X: -, Y: -';
+
+        updateDropZoneLabel('Click or Drag & Drop Photo', 'Supports JPG, PNG, WebP (click to change photo)');
+        updateTabButtons();
+        updateModeUI();
+        updateCalibration();
+        updateExclusionUI();
+        resetResultsUI();
+        setStatus('Reset complete. Upload a photo or click Load IMG_5468 Model.');
       }
 
       function applyAutoGridPreset() {
@@ -3214,34 +3397,66 @@
       function handleFile(file) {
         if (!file) return;
         const fname = (file.name || '').toUpperCase();
-        if (fname.includes('IMG_5468')) {
+        if (fname === 'IMG_5468.HEIC' || fname === 'IMG_5468.JPG') {
           els.btnLoadSample.click();
           return;
         }
+        setStatus(`Loading ${file.name}...`);
         const reader = new FileReader();
         reader.onload = (e) => {
           loadFromDataUrl(
             e.target.result,
             () => {
-              applyAutoGridPreset();
-              setStatus(`Loaded ${file.name} (${state.imageWidth}×${state.imageHeight}) — Auto-calibrated 1 cm grid.`);
+              state.calibPoints = [];
+              state.exclusionBoxes = [];
+              state.interactionMode = 'none';
+              updateModeUI();
+              updateCalibration();
+              updateExclusionUI();
+              updateDropZoneLabel(`Loaded: ${file.name}`, 'Click or drop another photo to replace');
+              setStatus(`Loaded ${file.name} (${state.imageWidth}×${state.imageHeight}) — Click "Click 2 Ruler Marks" or "Auto 1 cm Grid Setup" to calibrate.`);
               runAnalysis();
             },
             () => {
               if (fname.endsWith('.HEIC') || fname.endsWith('.HEIF')) {
-                setStatus('Browser cannot decode raw .HEIC directly — loading converted IMG_5468 (or use D:\\Cullet\\IMG_5468.jpg).');
-                els.btnLoadSample.click();
+                setStatus(`Browser cannot decode ${file.name} (.HEIC). Please convert it to JPG or PNG first.`);
+                alert(`Your browser cannot open raw .HEIC files directly (${file.name}). Please convert the photo to JPG or PNG and upload again.`);
               } else {
-                setStatus(`Could not decode ${file.name}. Please use JPG or PNG.`);
+                setStatus(`Could not decode ${file.name}. Please use JPG, PNG, or WebP.`);
               }
             }
           );
         };
+        reader.onerror = () => {
+          setStatus(`Failed to read ${file.name}.`);
+        };
         reader.readAsDataURL(file);
+      }
+
+      function getActiveSourceCanvas() {
+        if (!state.sourceCanvas) return null;
+        if (!els.shadowRemovalToggle || !els.shadowRemovalToggle.checked) {
+          return state.sourceCanvas;
+        }
+        if (!state.shadowFreeCanvas && window.CulletEngine && typeof window.CulletEngine.removeShadows === 'function') {
+          const srcCtx = state.sourceCanvas.getContext('2d');
+          const srcImg = srcCtx.getImageData(0, 0, state.imageWidth, state.imageHeight);
+          const cleaned = window.CulletEngine.removeShadows(srcImg);
+          const c = document.createElement('canvas');
+          c.width = state.imageWidth;
+          c.height = state.imageHeight;
+          const cCtx = c.getContext('2d');
+          const outImg = cCtx.createImageData(state.imageWidth, state.imageHeight);
+          outImg.data.set(cleaned.data);
+          cCtx.putImageData(outImg, 0, 0);
+          state.shadowFreeCanvas = c;
+        }
+        return state.shadowFreeCanvas || state.sourceCanvas;
       }
 
       function renderViewport() {
         if (!state.sourceCanvas) return;
+        const activeCanvas = getActiveSourceCanvas();
         const w = state.imageWidth;
         const h = state.imageHeight;
         mainCtx.clearRect(0, 0, w, h);
@@ -3251,7 +3466,7 @@
         } else if (state.viewMode === 'annotated' && state.analysisResult && window.CulletEngine) {
           window.CulletEngine.renderAnnotatedCanvas(
             els.mainCanvas,
-            state.sourceCanvas,
+            activeCanvas,
             state.analysisResult,
             {
               calibPoints: state.calibPoints,
@@ -3263,7 +3478,7 @@
             }
           );
         } else {
-          mainCtx.drawImage(state.sourceCanvas, 0, 0);
+          mainCtx.drawImage(activeCanvas, 0, 0);
           drawInteractiveOverlays();
         }
 
@@ -3342,7 +3557,8 @@
 
         requestAnimationFrame(() => {
           try {
-            const ctx = state.sourceCanvas.getContext('2d');
+            const activeCanvas = getActiveSourceCanvas();
+            const ctx = activeCanvas.getContext('2d');
             const imageData = ctx.getImageData(0, 0, state.imageWidth, state.imageHeight);
             const options = {
               pixelsPerMm: state.pixelsPerMm,
@@ -3654,7 +3870,10 @@
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); els.fileInput.click(); }
       });
       els.fileInput.addEventListener('change', (e) => {
-        if (e.target.files[0]) handleFile(e.target.files[0]);
+        if (e.target.files && e.target.files[0]) {
+          handleFile(e.target.files[0]);
+        }
+        e.target.value = '';
       });
       els.dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -3664,8 +3883,12 @@
       els.dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         els.dropZone.classList.remove('drag-over');
-        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleFile(e.dataTransfer.files[0]);
+        }
       });
+
+      els.btnReset.addEventListener('click', resetWorkspace);
 
       els.btnLoadSample.addEventListener('click', () => {
         if (!window.CulletEngine || typeof window.CulletEngine.generateSampleImage !== 'function') {
@@ -3682,6 +3905,7 @@
         state.exclusionBoxes = (sample.suggestedExclusion || []).map(b => ({ ...b }));
         updateCalibration();
         updateExclusionUI();
+        updateDropZoneLabel('Loaded: IMG_5468 (1 cm Grid Model)', 'Click or drop another photo to replace');
         loadFromDataUrl(sample.dataUrl, () => {
           setStatus('Sample cullet loaded with suggested ruler calibration & exclusion box.');
           runAnalysis();
@@ -3721,6 +3945,12 @@
       });
 
       els.btnAnalyze.addEventListener('click', runAnalysis);
+      els.shadowRemovalToggle.addEventListener('change', () => {
+        if (state.sourceCanvas) {
+          renderViewport();
+          runAnalysis();
+        }
+      });
 
       els.tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
